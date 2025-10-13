@@ -1,4 +1,5 @@
 <?php
+
 /**
  * OperaSys - Registro de Usuario
  * Archivo: modules/auth/register.php
@@ -15,18 +16,20 @@ if (isset($_SESSION['user_id'])) {
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro - <?php echo SITE_NAME; ?></title>
-    
-    <!-- AdminLTE CSS CDN -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-    <!-- Font Awesome CDN -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- AdminLTE CSS LOCAL -->
+    <link rel="stylesheet" href="../../vendor/adminlte/dist/css/adminlte.min.css">
+    <!-- Font Awesome LOCAL -->
+    <link rel="stylesheet" href="../../vendor/adminlte/plugins/fontawesome-free/css/all.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="../../assets/css/custom.css">
 </head>
+
 <body class="hold-transition register-page">
     <div class="register-box">
         <div class="card card-outline card-primary">
@@ -40,13 +43,13 @@ if (isset($_SESSION['user_id'])) {
                 <form id="formRegistro" method="POST">
                     <!-- Nombre Completo -->
                     <div class="input-group mb-3">
-                        <input type="text" 
-                               class="form-control" 
-                               name="nombre_completo" 
-                               placeholder="Nombres y Apellidos" 
-                               required
-                               minlength="3"
-                               maxlength="150">
+                        <input type="text"
+                            class="form-control"
+                            name="nombre_completo"
+                            placeholder="Nombres y Apellidos"
+                            required
+                            minlength="3"
+                            maxlength="150">
                         <div class="input-group-append">
                             <div class="input-group-text">
                                 <span class="fas fa-user"></span>
@@ -56,14 +59,14 @@ if (isset($_SESSION['user_id'])) {
 
                     <!-- DNI -->
                     <div class="input-group mb-3">
-                        <input type="text" 
-                               class="form-control" 
-                               name="dni" 
-                               placeholder="DNI o Código Interno" 
-                               required
-                               pattern="[0-9]{8,20}"
-                               title="Ingrese un DNI válido (8-20 dígitos)"
-                               maxlength="20">
+                        <input type="text"
+                            class="form-control"
+                            name="dni"
+                            placeholder="DNI o Código Interno"
+                            required
+                            pattern="[0-9]{8,20}"
+                            title="Ingrese un DNI válido (8-20 dígitos)"
+                            maxlength="20">
                         <div class="input-group-append">
                             <div class="input-group-text">
                                 <span class="fas fa-id-card"></span>
@@ -89,14 +92,14 @@ if (isset($_SESSION['user_id'])) {
 
                     <!-- Contraseña -->
                     <div class="input-group mb-3">
-                        <input type="password" 
-                               class="form-control" 
-                               name="password" 
-                               id="password"
-                               placeholder="Contraseña" 
-                               required
-                               minlength="6"
-                               title="La contraseña debe tener al menos 6 caracteres">
+                        <input type="password"
+                            class="form-control"
+                            name="password"
+                            id="password"
+                            placeholder="Contraseña"
+                            required
+                            minlength="6"
+                            title="La contraseña debe tener al menos 6 caracteres">
                         <div class="input-group-append">
                             <div class="input-group-text">
                                 <span class="fas fa-lock"></span>
@@ -106,13 +109,13 @@ if (isset($_SESSION['user_id'])) {
 
                     <!-- Confirmar Contraseña -->
                     <div class="input-group mb-3">
-                        <input type="password" 
-                               class="form-control" 
-                               name="password_confirm" 
-                               id="password_confirm"
-                               placeholder="Confirmar Contraseña" 
-                               required
-                               minlength="6">
+                        <input type="password"
+                            class="form-control"
+                            name="password_confirm"
+                            id="password_confirm"
+                            placeholder="Confirmar Contraseña"
+                            required
+                            minlength="6">
                         <div class="input-group-append">
                             <div class="input-group-text">
                                 <span class="fas fa-lock"></span>
@@ -144,13 +147,14 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
 
-    <!-- jQuery CDN -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Bootstrap 4 CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- AdminLTE App CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <!-- jQuery LOCAL -->
+    <script src="../../vendor/adminlte/plugins/jquery/jquery.min.js"></script>
+    <!-- Bootstrap 4 LOCAL -->
+    <script src="../../vendor/adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <!-- AdminLTE App LOCAL -->
+    <script src="../../vendor/adminlte/dist/js/adminlte.min.js"></script>
     <!-- Custom JS -->
     <script src="../../assets/js/registro.js"></script>
 </body>
+
 </html>

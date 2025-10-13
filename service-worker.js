@@ -4,7 +4,7 @@
  * Descripción: Gestiona caché y funcionamiento offline
  */
 
-const CACHE_NAME = 'operasys-v1.0';
+const CACHE_NAME = 'operasys-v1.1';
 const CACHE_URLS = [
     '/operasys/',
     '/operasys/index.php',
@@ -13,7 +13,6 @@ const CACHE_URLS = [
     // Módulos de autenticación
     '/operasys/modules/auth/login.php',
     '/operasys/modules/auth/register.php',
-    '/operasys/modules/auth/logout.php',
     
     // Módulos de usuarios
     '/operasys/modules/usuarios/firma.php',
@@ -60,7 +59,14 @@ self.addEventListener('install', function(event) {
         caches.open(CACHE_NAME)
             .then(function(cache) {
                 console.log('[Service Worker] Cacheando archivos');
-                return cache.addAll(CACHE_URLS);
+                // Intentar cachear, pero continuar si falla alguno
+                return Promise.allSettled(
+                    CACHE_URLS.map(url => 
+                        cache.add(url).catch(err => 
+                            console.warn('[Service Worker] No se pudo cachear:', url)
+                        )
+                    )
+                );
             })
             .then(function() {
                 console.log('[Service Worker] ✓ Instalado correctamente');
@@ -105,46 +111,62 @@ self.addEventListener('fetch', function(event) {
     
     // No cachear peticiones a APIs (se manejan con IndexedDB)
     if (url.pathname.includes('/api/')) {
+        console.log('[Service Worker] Ignorando API:', url.pathname);
         return;
     }
     
-    // Estrategia: Cache First (Caché primero, luego red)
+    // No cachear logout (debe ejecutarse siempre)
+    if (url.pathname.includes('/logout.php')) {
+        console.log('[Service Worker] Ignorando logout');
+        return;
+    }
+    
+    // Estrategia: Network First para páginas PHP (para que siempre muestre contenido actualizado)
+    if (url.pathname.endsWith('.php')) {
+        event.respondWith(
+            fetch(event.request)
+                .then(function(response) {
+                    // Si la respuesta es buena, actualizar caché
+                    if (response && response.status === 200) {
+                        const responseToCache = response.clone();
+                        caches.open(CACHE_NAME).then(function(cache) {
+                            cache.put(event.request, responseToCache);
+                        });
+                    }
+                    return response;
+                })
+                .catch(function(error) {
+                    console.log('[Service Worker] Error de red, usando caché:', url.pathname);
+                    // Si falla la red, usar caché
+                    return caches.match(event.request);
+                })
+        );
+        return;
+    }
+    
+    // Estrategia: Cache First para recursos estáticos (CSS, JS, imágenes)
     event.respondWith(
         caches.match(event.request)
             .then(function(response) {
                 if (response) {
-                    // Encontrado en caché
-                    console.log('[Service Worker] Sirviendo desde caché:', event.request.url);
+                    console.log('[Service Worker] Sirviendo desde caché:', url.pathname);
                     return response;
                 }
                 
-                // No está en caché, solicitar a la red
-                console.log('[Service Worker] Solicitando a la red:', event.request.url);
+                console.log('[Service Worker] Solicitando a la red:', url.pathname);
                 return fetch(event.request)
                     .then(function(response) {
-                        // Validar respuesta
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            return response;
-                        }
-                        
-                        // Clonar respuesta
-                        const responseToCache = response.clone();
-                        
-                        // Guardar en caché para futuras peticiones
-                        caches.open(CACHE_NAME)
-                            .then(function(cache) {
+                        // Guardar en caché si la respuesta es válida
+                        if (response && response.status === 200) {
+                            const responseToCache = response.clone();
+                            caches.open(CACHE_NAME).then(function(cache) {
                                 cache.put(event.request, responseToCache);
                             });
-                        
+                        }
                         return response;
                     })
                     .catch(function(error) {
                         console.error('[Service Worker] Error de red:', error);
-                        
-                        // Si es una página HTML, devolver página offline
-                        if (event.request.headers.get('accept').includes('text/html')) {
-                            return caches.match('/operasys/offline.html');
-                        }
                     });
             })
     );
@@ -170,7 +192,7 @@ async function sincronizarReportes() {
         const db = await abrirDB();
         const tx = db.transaction('reportes_pendientes', 'readonly');
         const store = tx.objectStore('reportes_pendientes');
-        const reportes = await store.getAll();
+        const reportes = await getAllFromStore(store);
         
         console.log('[Service Worker] Reportes pendientes:', reportes.length);
         
@@ -222,36 +244,13 @@ function abrirDB() {
     });
 }
 
-// ============================================
-// NOTIFICACIONES PUSH (OPCIONAL)
-// ============================================
-self.addEventListener('push', function(event) {
-    console.log('[Service Worker] Notificación push recibida');
-    
-    const options = {
-        body: event.data ? event.data.text() : 'Nueva notificación de OperaSys',
-        icon: '/operasys/assets/img/icon-192x192.png',
-        badge: '/operasys/assets/img/icon-72x72.png',
-        vibrate: [200, 100, 200],
-        tag: 'operasys-notification'
-    };
-    
-    event.waitUntil(
-        self.registration.showNotification('OperaSys', options)
-    );
-});
+// Función auxiliar para obtener todos los registros
+function getAllFromStore(store) {
+    return new Promise((resolve, reject) => {
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
 
-// ============================================
-// MANEJO DE CLICKS EN NOTIFICACIONES
-// ============================================
-self.addEventListener('notificationclick', function(event) {
-    console.log('[Service Worker] Click en notificación');
-    
-    event.notification.close();
-    
-    event.waitUntil(
-        clients.openWindow('/operasys/')
-    );
-});
-
-console.log('[Service Worker] Script cargado');
+console.log('[Service Worker] Script cargado correctamente');

@@ -20,10 +20,10 @@ if (isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Iniciar Sesión - <?php echo SITE_NAME; ?></title>
     
-    <!-- AdminLTE CSS CDN -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-    <!-- Font Awesome CDN -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- AdminLTE CSS LOCAL -->
+    <link rel="stylesheet" href="../../vendor/adminlte/dist/css/adminlte.min.css">
+    <!-- Font Awesome LOCAL -->
+    <link rel="stylesheet" href="../../vendor/adminlte/plugins/fontawesome-free/css/all.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="../../assets/css/custom.css">
 </head>
@@ -87,12 +87,12 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
 
-    <!-- jQuery CDN -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Bootstrap 4 CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- AdminLTE App CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <!-- jQuery LOCAL -->
+    <script src="../../vendor/adminlte/plugins/jquery/jquery.min.js"></script>
+    <!-- Bootstrap 4 LOCAL -->
+    <script src="../../vendor/adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <!-- AdminLTE App LOCAL -->
+    <script src="../../vendor/adminlte/dist/js/adminlte.min.js"></script>
     <!-- Custom JS -->
     <script src="../../assets/js/app.js"></script>
 </body>
