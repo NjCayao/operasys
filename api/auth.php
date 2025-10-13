@@ -1,4 +1,5 @@
 <?php
+
 /**
  * OperaSys - API de Autenticación
  * Archivo: api/auth.php
@@ -76,17 +77,22 @@ try {
     ");
     $stmtAudit->execute([$user['id']]);
 
+    // Verificar si tiene firma
+    $tieneFirma = !empty($user['firma']);
+    $redirect = $tieneFirma ? '../admin/dashboard.php' : '../usuarios/firma.php';
+
     // Respuesta exitosa
     echo json_encode([
         'success' => true,
         'message' => 'Inicio de sesión exitoso',
-        'redirect' => '../admin/dashboard.php',
+        'redirect' => $redirect,
+        'tiene_firma' => $tieneFirma,
         'user' => [
             'nombre' => $user['nombre_completo'],
             'rol' => $user['rol']
         ]
     ]);
-
+    
 } catch (PDOException $e) {
     echo json_encode([
         'success' => false,

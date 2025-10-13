@@ -238,7 +238,7 @@ elseif ($action === 'actividad_reciente') {
             FROM auditoria a
             INNER JOIN usuarios u ON a.usuario_id = u.id
             ORDER BY a.fecha DESC
-            LIMIT 10
+            LIMIT 3
         ");
         $actividades = $stmt->fetchAll();
         

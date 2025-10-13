@@ -13,6 +13,9 @@ define('SITE_URL', 'http://localhost/operasys');
 define('SITE_NAME', 'OperaSys');
 define('SITE_VERSION', '1.0');
 
+// Versión de assets (cambiar cuando actualices JS/CSS)
+define('ASSETS_VERSION', '1.0.5');
+
 // Zona horaria
 date_default_timezone_set('America/Lima');
 

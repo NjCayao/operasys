@@ -2,133 +2,154 @@
 /**
  * OperaSys - Captura de Firma Digital
  * Archivo: modules/usuarios/firma.php
- * Descripción: Canvas HTML5 para dibujar y guardar firma
+ * Descripción: Canvas HTML5 para capturar firma del usuario
  */
 
 require_once '../../config/config.php';
 
-// Verificar que haya un usuario temporal en sesión (recién registrado)
-// o que sea un usuario autenticado que quiere actualizar su firma
-if (!isset($_SESSION['temp_user_id']) && !isset($_SESSION['user_id'])) {
+// Verificar que haya sesión activa
+if (!isset($_SESSION['user_id'])) {
     header('Location: ../auth/login.php');
     exit;
 }
 
-$usuarioId = $_SESSION['temp_user_id'] ?? $_SESSION['user_id'];
-$esNuevoRegistro = isset($_SESSION['temp_user_id']);
+$userId = $_SESSION['user_id'];
+$nombreUsuario = $_SESSION['nombre'];
+$esAdmin = $_SESSION['rol'] === 'admin';
+
+// Verificar si es edición de otro usuario (solo admin)
+$userIdEditar = $_GET['user_id'] ?? $userId;
+
+// Si no es admin y está intentando editar a otro, redirigir
+if (!$esAdmin && $userIdEditar != $userId) {
+    header('Location: ../admin/dashboard.php');
+    exit;
+}
+
+// Verificar si ya tiene firma
+require_once '../../config/database.php';
+$stmt = $pdo->prepare("SELECT firma, nombre_completo FROM usuarios WHERE id = ?");
+$stmt->execute([$userIdEditar]);
+$usuario = $stmt->fetch();
+$tieneFirma = !empty($usuario['firma']);
+
+// Si no es admin y ya tiene firma, redirigir (no puede actualizar)
+if (!$esAdmin && $tieneFirma) {
+    header('Location: perfil.php');
+    exit;
+}
+
+// Nombre del usuario a editar (si es admin editando a otro)
+$nombreEditar = ($userIdEditar != $userId) ? $usuario['nombre_completo'] : $nombreUsuario;
+
+// Configuración del layout
+$page_title = 'Captura de Firma';
+$auth_base_path = '../../';
+$body_class = 'register-page';
+$custom_js_file = 'assets/js/firma.js?v=' . ASSETS_VERSION;
+
+include '../../layouts/auth_header.php';
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firma Digital - <?php echo SITE_NAME; ?></title>
-    
-    <!-- AdminLTE CSS CDN -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-    <!-- Font Awesome CDN -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="../../assets/css/custom.css">
-    <style>
-        #canvasFirma {
-            border: 2px solid #2E86AB;
-            border-radius: 5px;
-            cursor: crosshair;
-            touch-action: none;
-            background-color: white;
-        }
-        .firma-container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-    </style>
-</head>
-<body class="hold-transition">
-    <div class="container mt-5">
-        <div class="firma-container">
-            <div class="card card-primary">
-                <div class="card-header">
-                    <h3 class="card-title">
-                        <i class="fas fa-signature"></i> Captura tu Firma Digital
-                    </h3>
-                </div>
-                <div class="card-body">
-                    <?php if ($esNuevoRegistro): ?>
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i>
-                            <strong>¡Último paso!</strong> Dibuja tu firma en el recuadro. Esta firma aparecerá en todos tus reportes.
-                        </div>
+
+<div class="register-box" style="width: 500px;">
+    <div class="card card-outline card-primary">
+        <div class="card-header text-center">
+            <h1><b>Opera</b>Sys</h1>
+            <p class="text-muted">Captura de Firma Digital</p>
+        </div>
+        <div class="card-body">
+
+            <?php if (!$tieneFirma): ?>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>
+                        <?php if ($userIdEditar == $userId): ?>
+                            Bienvenido, <?php echo htmlspecialchars($nombreUsuario); ?>!
+                        <?php else: ?>
+                            Capturando firma de: <?php echo htmlspecialchars($nombreEditar); ?>
+                        <?php endif; ?>
+                    </strong><br>
+                    <?php if ($userIdEditar == $userId): ?>
+                        Para comenzar a usar el sistema, necesitas registrar tu firma digital.
                     <?php else: ?>
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            Estás actualizando tu firma. La nueva firma reemplazará a la anterior.
-                        </div>
+                        Registra la firma digital del usuario.
                     <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <div class="alert alert-warning">
+                    <i class="fas fa-pen"></i>
+                    <strong>Actualizar Firma de: <?php echo htmlspecialchars($nombreEditar); ?></strong><br>
+                    Actualiza la firma digital del usuario.
+                </div>
+            <?php endif; ?>
 
-                    <p class="text-muted mb-3">
-                        <i class="fas fa-hand-pointer"></i> 
-                        Usa tu dedo (móvil) o mouse (PC) para dibujar tu firma.
-                    </p>
+            <p class="text-center mb-3">
+                <i class="fas fa-signature"></i>
+                Dibuja tu firma en el recuadro usando el mouse o tu dedo (en móvil)
+            </p>
 
-                    <!-- Canvas para dibujar -->
-                    <div class="text-center mb-3">
-                        <canvas id="canvasFirma" width="550" height="250"></canvas>
-                    </div>
+            <!-- Canvas para la firma -->
+            <div class="text-center mb-3">
+                <canvas id="canvasFirma"
+                    width="450"
+                    height="200"
+                    style="border: 2px solid #007bff; border-radius: 5px; cursor: crosshair; background: #fff;">
+                </canvas>
+            </div>
 
-                    <!-- Botones -->
-                    <div class="row">
-                        <div class="col-md-6 mb-2">
-                            <button type="button" id="btnLimpiar" class="btn btn-warning btn-block">
-                                <i class="fas fa-eraser"></i> Limpiar
-                            </button>
-                        </div>
-                        <div class="col-md-6 mb-2">
-                            <button type="button" id="btnGuardar" class="btn btn-success btn-block">
-                                <i class="fas fa-save"></i> Guardar Firma
-                            </button>
-                        </div>
-                    </div>
-
-                    <?php if (!$esNuevoRegistro): ?>
-                    <div class="row mt-2">
-                        <div class="col-12">
-                            <a href="../admin/dashboard.php" class="btn btn-secondary btn-block">
-                                <i class="fas fa-times"></i> Cancelar
-                            </a>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
-                    <!-- Mensaje de alerta -->
-                    <div id="alertMessage" class="alert mt-3" style="display: none;" role="alert">
-                        <span id="alertText"></span>
-                    </div>
+            <!-- Botones de acción -->
+            <div class="row mb-3">
+                <div class="col-6">
+                    <button type="button"
+                        class="btn btn-warning btn-block"
+                        id="btnLimpiar">
+                        <i class="fas fa-eraser"></i> Limpiar
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button type="button"
+                        class="btn btn-success btn-block"
+                        id="btnGuardar">
+                        <i class="fas fa-save"></i> Guardar Firma
+                    </button>
                 </div>
             </div>
 
             <!-- Instrucciones -->
-            <div class="card mt-3">
-                <div class="card-body">
-                    <h5><i class="fas fa-lightbulb"></i> Consejos:</h5>
+            <div class="alert alert-info">
+                <small>
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Instrucciones:</strong>
                     <ul class="mb-0">
-                        <li>Dibuja tu firma de forma clara y legible</li>
+                        <li>Dibuja tu firma con el mouse o el dedo</li>
                         <li>Si te equivocas, presiona "Limpiar" y vuelve a intentar</li>
-                        <li>La firma será visible en todos tus reportes</li>
-                        <li>Puedes cambiar tu firma más adelante desde tu perfil</li>
+                        <li>Cuando estés satisfecho, presiona "Guardar Firma"</li>
                     </ul>
-                </div>
+                </small>
             </div>
+
+            <!-- Mensaje de alerta -->
+            <div id="alertMessage" class="alert" style="display: none;" role="alert">
+                <i class="fas fa-exclamation-triangle"></i> <span id="alertText"></span>
+            </div>
+
+            <?php if ($userIdEditar != $userId): ?>
+                <!-- Si es admin editando a otro, mostrar botón cancelar -->
+                <div class="text-center mt-3">
+                    <a href="listar.php" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Cancelar
+                    </a>
+                </div>
+            <?php endif; ?>
+
         </div>
     </div>
+</div>
 
-    <!-- jQuery CDN -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Bootstrap 4 CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- AdminLTE App CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
-    <!-- Custom JS - Firma -->
-    <script src="../../assets/js/firma.js"></script>
-</body>
-</html>
+<!-- Campos ocultos -->
+<input type="hidden" id="tieneFirma" value="<?php echo $tieneFirma ? '1' : '0'; ?>">
+<input type="hidden" id="userIdEditar" value="<?php echo $userIdEditar; ?>">
+<input type="hidden" id="esAdmin" value="<?php echo $esAdmin ? '1' : '0'; ?>">
+<input type="hidden" id="userIdSesion" value="<?php echo $userId; ?>">
+
+<?php include '../../layouts/auth_footer.php'; ?>
