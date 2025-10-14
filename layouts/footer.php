@@ -29,7 +29,7 @@
 <script src="<?php echo $base_path; ?>vendor/adminlte/plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
 <?php endif; ?>
 
-<?php if (isset($use_chart) && $use_chart): ?>
+<?php if ((isset($use_chart) && $use_chart) || (isset($use_chartjs) && $use_chartjs)): ?>
 <!-- Chart.js LOCAL -->
 <script src="<?php echo $base_path; ?>vendor/adminlte/plugins/chart.js/Chart.min.js"></script>
 <?php endif; ?>

@@ -1,9 +1,9 @@
 <?php
 
 /**
- * OperaSys - Generador de PDF
+ * OperaSys - Generador de PDF con FPDF
  * Archivo: api/pdf.php
- * Descripción: Genera PDF de reportes finalizados
+ * Descripción: Genera PDF de reportes finalizados con FPDF
  */
 
 require_once '../config/database.php';
@@ -19,6 +19,14 @@ $reporteId = $_GET['id'] ?? 0;
 if (!$reporteId) {
     die('ID de reporte no válido');
 }
+
+// Verificar si FPDF existe
+$fpdfPath = __DIR__ . '/../vendor/fpdf/fpdf.php';
+if (!file_exists($fpdfPath)) {
+    die('FPDF no está instalado. Descárgalo de http://www.fpdf.org/ y colócalo en vendor/fpdf/fpdf.php');
+}
+
+require_once $fpdfPath;
 
 try {
     // Obtener datos del reporte
@@ -51,6 +59,10 @@ try {
     if ($reporte['usuario_id'] != $userId && $userRol !== 'admin' && $userRol !== 'supervisor') {
         die('No tiene permisos para ver este reporte');
     }
+
+    // Obtener configuración de empresa
+    $stmtEmpresa = $pdo->query("SELECT * FROM configuracion_empresa WHERE id = 1");
+    $empresa = $stmtEmpresa->fetch();
 
     // Obtener actividades
     $stmtActividades = $pdo->prepare("
@@ -90,348 +102,324 @@ try {
     die('Error al obtener datos: ' . $e->getMessage());
 }
 
-// Configurar headers para PDF
-header('Content-Type: text/html; charset=utf-8');
-?>
-<!DOCTYPE html>
-<html lang="es">
+// ========== CLASE PDF PERSONALIZADA ==========
+class PDF extends FPDF
+{
+    private $empresa;
+    private $reporte;
 
-<head>
-    <meta charset="UTF-8">
-    <title>Reporte #<?php echo $reporte['id']; ?> - <?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?></title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    function __construct($empresa, $reporte)
+    {
+        parent::__construct('P', 'mm', 'A4');
+        $this->empresa = $empresa;
+        $this->reporte = $reporte;
+    }
 
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 11pt;
-            line-height: 1.4;
-            color: #333;
-            padding: 20px;
-        }
+    // Encabezado
+    function Header()
+    {
+        // ===== ENCABEZADO FIJO - OBLIGATORIO =====
 
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 3px solid #2E86AB;
-            padding-bottom: 15px;
-        }
+        // Título principal FIJO
+        $this->SetFont('Arial', 'B', 18);
+        $this->SetTextColor(46, 134, 171);
+        $this->Cell(0, 8, 'OperaSys', 0, 1, 'C');
 
-        .header h1 {
-            color: #2E86AB;
-            font-size: 24pt;
-            margin-bottom: 5px;
-        }
+        // Subtítulo FIJO
+        $this->SetFont('Arial', '', 12);
+        $this->SetTextColor(0, 0, 0);
+        $this->Cell(0, 6, utf8_decode('Reporte Diario de Operaciones'), 0, 1, 'C');
 
-        .header h2 {
-            color: #666;
-            font-size: 14pt;
-            font-weight: normal;
-        }
+        $this->Ln(2);
 
-        .info-section {
-            margin-bottom: 20px;
-        }
+        // Línea separadora
+        $this->SetDrawColor(46, 134, 171);
+        $this->SetLineWidth(0.5);
+        $this->Line(10, $this->GetY(), 200, $this->GetY());
+        $this->Ln(3);
 
-        .info-section h3 {
-            background-color: #2E86AB;
-            color: white;
-            padding: 8px 12px;
-            font-size: 12pt;
-            margin-bottom: 10px;
-        }
+        // ===== LOGO (Si existe) - En esquina superior derecha =====
+        if (!empty($this->empresa['logo'])) {
+            $logoData = $this->empresa['logo'];
+            if (preg_match('/^data:image\/(png|jpeg|jpg);base64,(.+)$/', $logoData, $matches)) {
+                $ext = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
+                $logoDecoded = base64_decode($matches[2]);
 
-        .info-grid {
-            display: table;
-            width: 100%;
-            margin-bottom: 15px;
-        }
+                if ($logoDecoded !== false && strlen($logoDecoded) > 0) {
+                    $tmpFile = sys_get_temp_dir() . '/logo_operasys_' . time() . '.' . $ext;
 
-        .info-row {
-            display: table-row;
-        }
-
-        .info-label {
-            display: table-cell;
-            font-weight: bold;
-            width: 30%;
-            padding: 5px 10px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .info-value {
-            display: table-cell;
-            padding: 5px 10px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-        }
-
-        table th {
-            background-color: #f5f5f5;
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-            font-size: 10pt;
-        }
-
-        table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            font-size: 10pt;
-        }
-
-        table tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-right {
-            text-align: right;
-        }
-
-        .total-row {
-            background-color: #e3f2fd !important;
-            font-weight: bold;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 3px;
-            font-size: 9pt;
-            font-weight: bold;
-        }
-
-        .badge-success {
-            background-color: #28a745;
-            color: white;
-        }
-
-        .badge-warning {
-            background-color: #ffc107;
-            color: #333;
-        }
-
-        .badge-info {
-            background-color: #17a2b8;
-            color: white;
-        }
-
-        .observaciones {
-            border: 1px solid #ddd;
-            padding: 12px;
-            background-color: #f9f9f9;
-            margin-top: 10px;
-            white-space: pre-wrap;
-        }
-
-        .firma-section {
-            margin-top: 40px;
-            text-align: center;
-        }
-
-        .firma-img {
-            max-width: 200px;
-            max-height: 80px;
-            border: 1px solid #ddd;
-            padding: 5px;
-            margin-bottom: 5px;
-        }
-
-        .footer {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 9pt;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
-        }
-
-        @media print {
-            body {
-                padding: 10px;
-            }
-
-            .no-print {
-                display: none;
+                    if (file_put_contents($tmpFile, $logoDecoded)) {
+                        try {
+                            // Verificar que el archivo existe y es válido
+                            if (file_exists($tmpFile) && filesize($tmpFile) > 0) {
+                                $this->Image($tmpFile, 170, 8, 30);
+                            }
+                        } catch (Exception $e) {
+                            // Si falla el logo, continuar sin él
+                        }
+                        @unlink($tmpFile);
+                    }
+                }
             }
         }
-    </style>
-</head>
 
-<body>
+        // ===== DATOS DE EMPRESA (Opcionales) =====
 
-    <!-- Header -->
-    <div class="header">
-        <h1>OperaSys</h1>
-        <h2>Reporte Diario de Operaciones</h2>
-    </div>
+        // Nombre de empresa (si existe)
+        if (!empty($this->empresa['nombre_empresa'])) {
+            $this->SetFont('Arial', 'B', 10);
+            $this->SetTextColor(0, 0, 0);
+            $this->Cell(0, 5, utf8_decode($this->empresa['nombre_empresa']), 0, 1, 'C');
+        }
 
-    <!-- Información General -->
-    <div class="info-section">
-        <h3>📋 Información del Reporte</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="width: 33.33%; padding: 8px; border: 1px solid #ddd; vertical-align: top;">
-                    <strong style="color: #2E86AB;">📋 General</strong><br>
-                    <strong>Reporte N°:</strong> #<?php echo str_pad($reporte['id'], 4, '0', STR_PAD_LEFT); ?><br>
-                    <strong>Fecha:</strong> <?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?><br>
-                    <strong>Estado:</strong>
-                    <?php if ($reporte['estado'] === 'finalizado'): ?>
-                        <span class="badge badge-success">Finalizado</span>
-                    <?php else: ?>
-                        <span class="badge badge-warning">Borrador</span>
-                    <?php endif; ?>
-                </td>
-                <td style="width: 33.33%; padding: 8px; border: 1px solid #ddd; vertical-align: top;">
-                    <strong style="color: #2E86AB;">👤 Operador</strong><br>
-                    <strong>Nombre:</strong> <?php echo htmlspecialchars($reporte['operador']); ?><br>
-                    <strong>DNI:</strong> <?php echo htmlspecialchars($reporte['operador_dni']); ?><br>
-                    <strong>Cargo:</strong> <?php echo htmlspecialchars($reporte['operador_cargo']); ?>
-                </td>
-                <td style="width: 33.33%; padding: 8px; border: 1px solid #ddd; vertical-align: top;">
-                    <strong style="color: #2E86AB;">🚜 Equipo</strong><br>
-                    <strong>Categoría:</strong> <?php echo htmlspecialchars($reporte['equipo_categoria']); ?><br>
-                    <strong>Código:</strong> <?php echo htmlspecialchars($reporte['equipo_codigo']); ?>
-                    <?php if ($reporte['equipo_descripcion']): ?>
-                        <br><strong>Descripción:</strong> <?php echo htmlspecialchars($reporte['equipo_descripcion']); ?>
-                    <?php endif; ?>
-                </td>
-            </tr>
-        </table>
-    </div>
+        // Datos adicionales (si existen)
+        $this->SetFont('Arial', '', 8);
+        $this->SetTextColor(100, 100, 100);
 
-    <!-- Actividades -->
-    <div class="info-section">
-        <h3>📊 Actividades Realizadas</h3>
-        <?php if (empty($actividades)): ?>
-            <p style="text-align: center; color: #999;">No hay actividades registradas</p>
-        <?php else: ?>
-            <table>
-                <thead>
-                    <tr>
-                        <th width="5%">#</th>
-                        <th width="20%">Tipo de Trabajo</th>
-                        <th width="25%">Fase de Costo</th>
-                        <th width="12%" class="text-center">H. Inicial</th>
-                        <th width="12%" class="text-center">H. Final</th>
-                        <th width="10%" class="text-center">Horas</th>
-                        <th>Observaciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($actividades as $index => $act): ?>
-                        <tr>
-                            <td class="text-center"><?php echo $index + 1; ?></td>
-                            <td><?php echo htmlspecialchars($act['tipo_trabajo']); ?></td>
-                            <td>
-                                <strong><?php echo htmlspecialchars($act['fase_codigo']); ?></strong><br>
-                                <small style="color: #666;"><?php echo htmlspecialchars($act['fase_descripcion']); ?></small>
-                            </td>
-                            <td class="text-center"><?php echo number_format($act['horometro_inicial'], 1); ?></td>
-                            <td class="text-center"><?php echo number_format($act['horometro_final'], 1); ?></td>
-                            <td class="text-center">
-                                <span class="badge badge-info"><?php echo number_format($act['horas_trabajadas'], 2); ?> hrs</span>
-                            </td>
-                            <td><?php echo $act['observaciones'] ? htmlspecialchars($act['observaciones']) : '-'; ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    <tr class="total-row">
-                        <td colspan="5" class="text-right">TOTAL HORAS TRABAJADAS:</td>
-                        <td class="text-center">
-                            <span class="badge badge-success"><?php echo number_format($totalHoras, 2); ?> hrs</span>
-                        </td>
-                        <td></td>
-                    </tr>
-                </tbody>
-            </table>
-        <?php endif; ?>
-    </div>
+        $datosEmpresa = [];
+        if (!empty($this->empresa['ruc_nit'])) {
+            $datosEmpresa[] = 'RUC: ' . $this->empresa['ruc_nit'];
+        }
+        if (!empty($this->empresa['direccion'])) {
+            $datosEmpresa[] = $this->empresa['direccion'];
+        }
+        if (!empty($this->empresa['telefono'])) {
+            $datosEmpresa[] = 'Tel: ' . $this->empresa['telefono'];
+        }
+        if (!empty($this->empresa['email'])) {
+            $datosEmpresa[] = $this->empresa['email'];
+        }
 
-    <!-- Combustible -->
-    <?php if (!empty($combustibles)): ?>
-        <div class="info-section">
-            <h3>⛽ Abastecimiento de Combustible</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th width="8%">#</th>
-                        <th width="18%" class="text-center">Horómetro</th>
-                        <th width="18%" class="text-center">Galones</th>
-                        <th width="25%">Fecha/Hora</th>
-                        <th>Observaciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($combustibles as $index => $comb): ?>
-                        <tr>
-                            <td class="text-center"><?php echo $index + 1; ?></td>
-                            <td class="text-center"><?php echo number_format($comb['horometro'], 1); ?></td>
-                            <td class="text-center"><strong><?php echo number_format($comb['galones'], 2); ?></strong> gal</td>
-                            <td><?php echo date('d/m/Y H:i', strtotime($comb['fecha_hora'])); ?></td>
-                            <td><?php echo $comb['observaciones'] ? htmlspecialchars($comb['observaciones']) : '-'; ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    <tr class="total-row">
-                        <td colspan="2" class="text-right">TOTAL GALONES:</td>
-                        <td class="text-center">
-                            <span class="badge badge-info"><?php echo number_format($totalGalones, 2); ?> gal</span>
-                        </td>
-                        <td colspan="2"></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
+        if (!empty($datosEmpresa)) {
+            $this->Cell(0, 4, utf8_decode(implode(' | ', $datosEmpresa)), 0, 1, 'C');
+        }
 
-    <!-- Observaciones Generales -->
-    <?php if (!empty($reporte['observaciones_generales'])): ?>
-        <div class="info-section">
-            <h3>💬 Observaciones Generales</h3>
-            <div class="observaciones">
-                <?php echo nl2br(htmlspecialchars($reporte['observaciones_generales'])); ?>
-            </div>
-        </div>
-    <?php endif; ?>
+        $this->SetTextColor(0, 0, 0);
+        $this->Ln(3);
+    }
 
-    <!-- Firma del Operador -->
-    <?php if ($reporte['operador_firma']): ?>
-        <div class="firma-section">
-            <p><strong>Firma del Operador:</strong></p>
-            <img src="<?php echo $reporte['operador_firma']; ?>" alt="Firma" class="firma-img">
-            <p><?php echo htmlspecialchars($reporte['operador']); ?></p>
-            <p style="font-size: 9pt; color: #666;">DNI: <?php echo htmlspecialchars($reporte['operador_dni']); ?></p>
-        </div>
-    <?php endif; ?>
+    // Pie de página
+    function Footer()
+    {
+        $this->SetY(-15);
+        $this->SetFont('Arial', 'I', 8);
+        $this->SetTextColor(128, 128, 128);
+        $this->Cell(0, 5, utf8_decode('Generado el ' . date('d/m/Y H:i:s') . ' | Página ' . $this->PageNo()), 0, 0, 'C');
+    }
 
-    <!-- Footer -->
-    <div class="footer">
-        <p><strong>OperaSys</strong> - Sistema de Reportes de Operaciones</p>
-        <p>Generado el: <?php echo date('d/m/Y H:i:s'); ?></p>
-    </div>
+    // Sección de información compacta en 3 columnas
+    function InfoSection()
+    {
+        $this->SetFont('Arial', 'B', 9);
+        $this->SetFillColor(230, 230, 230);
 
-    <!-- Botones de acción (no se imprimen) -->
-    <div class="no-print" style="text-align: center; margin-top: 20px;">
-        <button onclick="window.print()" style="padding: 10px 20px; background-color: #2E86AB; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12pt;">
-            🖨️ Imprimir / Guardar PDF
-        </button>
-        <button onclick="window.close()" style="padding: 10px 20px; background-color: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12pt; margin-left: 10px;">
-            ❌ Cerrar
-        </button>
-    </div>
+        $colWidth = 63.33;
 
-</body>
+        // Columna 1: General
+        $this->Cell($colWidth, 6, utf8_decode('GENERAL'), 1, 0, 'C', true);
+        $this->Cell($colWidth, 6, utf8_decode('OPERADOR'), 1, 0, 'C', true);
+        $this->Cell($colWidth, 6, utf8_decode('EQUIPO'), 1, 1, 'C', true);
 
-</html>
+        $this->SetFont('Arial', '', 8);
+
+        // Fila 1
+        $x = $this->GetX();
+        $y = $this->GetY();
+
+        $this->MultiCell($colWidth, 4, utf8_decode(
+            "Reporte No: #" . str_pad($this->reporte['id'], 4, '0', STR_PAD_LEFT) . "\n" .
+                "Fecha: " . date('d/m/Y', strtotime($this->reporte['fecha'])) . "\n" .
+                "Estado: " . ucfirst($this->reporte['estado'])
+        ), 1, 'L');
+
+        $y2 = $this->GetY();
+        $this->SetXY($x + $colWidth, $y);
+
+        $this->MultiCell($colWidth, 4, utf8_decode(
+            "Nombre: " . $this->reporte['operador'] . "\n" .
+                "DNI: " . $this->reporte['operador_dni'] . "\n" .
+                "Cargo: " . $this->reporte['operador_cargo']
+        ), 1, 'L');
+
+        $y3 = $this->GetY();
+        $this->SetXY($x + $colWidth * 2, $y);
+
+        $equipo_desc = !empty($this->reporte['equipo_descripcion'])
+            ? "\nDesc: " . substr($this->reporte['equipo_descripcion'], 0, 30)
+            : '';
+
+        $this->MultiCell($colWidth, 4, utf8_decode(
+            "Categoria: " . $this->reporte['equipo_categoria'] . "\n" .
+                "Codigo: " . $this->reporte['equipo_codigo'] .
+                $equipo_desc
+        ), 1, 'L');
+
+        $maxY = max($y2, $y3, $this->GetY());
+        $this->SetY($maxY);
+        $this->Ln(3);
+    }
+
+    // Tabla de actividades
+    function TablaActividades($actividades, $totalHoras)
+    {
+        $this->SetFont('Arial', 'B', 10);
+        $this->SetFillColor(46, 134, 171);
+        $this->SetTextColor(255, 255, 255);
+        $this->Cell(0, 6, utf8_decode('ACTIVIDADES REALIZADAS'), 0, 1, 'L', true);
+        $this->SetTextColor(0, 0, 0);
+        $this->Ln(1);
+
+        if (empty($actividades)) {
+            $this->SetFont('Arial', 'I', 9);
+            $this->Cell(0, 6, utf8_decode('No hay actividades registradas'), 1, 1, 'C');
+            return;
+        }
+
+        // Encabezados de tabla
+        $this->SetFont('Arial', 'B', 8);
+        $this->SetFillColor(240, 240, 240);
+        $this->Cell(8, 6, utf8_decode('#'), 1, 0, 'C', true);
+        $this->Cell(35, 6, utf8_decode('Tipo Trabajo'), 1, 0, 'C', true);
+        $this->Cell(40, 6, utf8_decode('Fase Costo'), 1, 0, 'C', true);
+        $this->Cell(20, 6, utf8_decode('H. Inicial'), 1, 0, 'C', true);
+        $this->Cell(20, 6, utf8_decode('H. Final'), 1, 0, 'C', true);
+        $this->Cell(18, 6, utf8_decode('Horas'), 1, 0, 'C', true);
+        $this->Cell(49, 6, utf8_decode('Observaciones'), 1, 1, 'C', true);
+
+        // Datos
+        $this->SetFont('Arial', '', 7);
+        foreach ($actividades as $index => $act) {
+            $this->Cell(8, 5, $index + 1, 1, 0, 'C');
+            $this->Cell(35, 5, utf8_decode(substr($act['tipo_trabajo'], 0, 25)), 1, 0, 'L');
+            $this->Cell(40, 5, utf8_decode($act['fase_codigo'] . ' - ' . substr($act['fase_descripcion'], 0, 15)), 1, 0, 'L');
+            $this->Cell(20, 5, number_format($act['horometro_inicial'], 1), 1, 0, 'C');
+            $this->Cell(20, 5, number_format($act['horometro_final'], 1), 1, 0, 'C');
+            $this->Cell(18, 5, number_format($act['horas_trabajadas'], 2), 1, 0, 'C');
+            $this->Cell(49, 5, utf8_decode(substr($act['observaciones'] ?? '-', 0, 35)), 1, 1, 'L');
+        }
+
+        // Total
+        $this->SetFont('Arial', 'B', 8);
+        $this->SetFillColor(227, 242, 253);
+        $this->Cell(123, 5, utf8_decode('TOTAL HORAS TRABAJADAS:'), 1, 0, 'R', true);
+        $this->Cell(18, 5, number_format($totalHoras, 2), 1, 0, 'C', true);
+        $this->Cell(49, 5, '', 1, 1, 'C', true);
+
+        $this->Ln(3);
+    }
+
+    // Tabla de combustible
+    function TablaCombustible($combustibles, $totalGalones)
+    {
+        if (empty($combustibles)) return;
+
+        $this->SetFont('Arial', 'B', 10);
+        $this->SetFillColor(46, 134, 171);
+        $this->SetTextColor(255, 255, 255);
+        $this->Cell(0, 6, utf8_decode('ABASTECIMIENTO DE COMBUSTIBLE'), 0, 1, 'L', true);
+        $this->SetTextColor(0, 0, 0);
+        $this->Ln(1);
+
+        // Encabezados
+        $this->SetFont('Arial', 'B', 8);
+        $this->SetFillColor(240, 240, 240);
+        $this->Cell(10, 6, utf8_decode('#'), 1, 0, 'C', true);
+        $this->Cell(30, 6, utf8_decode('Horometro'), 1, 0, 'C', true);
+        $this->Cell(30, 6, utf8_decode('Galones'), 1, 0, 'C', true);
+        $this->Cell(50, 6, utf8_decode('Fecha/Hora'), 1, 0, 'C', true);
+        $this->Cell(70, 6, utf8_decode('Observaciones'), 1, 1, 'C', true);
+
+        // Datos
+        $this->SetFont('Arial', '', 8);
+        foreach ($combustibles as $index => $comb) {
+            $this->Cell(10, 5, $index + 1, 1, 0, 'C');
+            $this->Cell(30, 5, number_format($comb['horometro'], 1), 1, 0, 'C');
+            $this->Cell(30, 5, number_format($comb['galones'], 2), 1, 0, 'C');
+            $this->Cell(50, 5, date('d/m/Y H:i', strtotime($comb['fecha_hora'])), 1, 0, 'C');
+            $this->Cell(70, 5, utf8_decode(substr($comb['observaciones'] ?? '-', 0, 50)), 1, 1, 'L');
+        }
+
+        // Total
+        $this->SetFont('Arial', 'B', 8);
+        $this->SetFillColor(227, 242, 253);
+        $this->Cell(40, 5, utf8_decode('TOTAL GALONES:'), 1, 0, 'R', true);
+        $this->Cell(30, 5, number_format($totalGalones, 2), 1, 0, 'C', true);
+        $this->Cell(120, 5, '', 1, 1, 'C', true);
+
+        $this->Ln(3);
+    }
+
+    // Observaciones generales
+    function ObservacionesGenerales($observaciones)
+    {
+        if (empty($observaciones)) return;
+
+        $this->SetFont('Arial', 'B', 10);
+        $this->SetFillColor(46, 134, 171);
+        $this->SetTextColor(255, 255, 255);
+        $this->Cell(0, 6, utf8_decode('OBSERVACIONES GENERALES'), 0, 1, 'L', true);
+        $this->SetTextColor(0, 0, 0);
+        $this->Ln(1);
+
+        $this->SetFont('Arial', '', 9);
+        $this->SetFillColor(249, 249, 249);
+        $this->MultiCell(0, 5, utf8_decode($observaciones), 1, 'J', true);
+        $this->Ln(3);
+    }
+
+    // Firma del operador
+    function Firma($firma, $operador, $dni)
+    {
+        if (empty($firma)) return;
+
+        $this->Ln(5);
+        $this->SetFont('Arial', 'B', 9);
+        $this->Cell(0, 5, utf8_decode('FIRMA DEL OPERADOR'), 0, 1, 'C');
+
+        // Convertir firma base64 a imagen
+        if (preg_match('/^data:image\/(png|jpeg|jpg);base64,(.+)$/', $firma, $matches)) {
+            $ext = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
+            $firmaDecoded = base64_decode($matches[2]);
+            $tmpFile = sys_get_temp_dir() . '/firma_tmp.' . $ext;
+            file_put_contents($tmpFile, $firmaDecoded);
+
+            // Centrar firma
+            $firmaWidth = 50;
+            $x = ($this->GetPageWidth() - $firmaWidth) / 2;
+            $this->Image($tmpFile, $x, $this->GetY(), $firmaWidth);
+            @unlink($tmpFile);
+
+            $this->Ln(20);
+        }
+
+        $this->SetFont('Arial', '', 9);
+        $this->Cell(0, 5, utf8_decode($operador), 0, 1, 'C');
+        $this->SetFont('Arial', 'I', 8);
+        $this->Cell(0, 4, utf8_decode('DNI: ' . $dni), 0, 1, 'C');
+    }
+}
+
+// ========== GENERAR PDF ==========
+$pdf = new PDF($empresa, $reporte);
+$pdf->SetMargins(10, 10, 10);
+$pdf->SetAutoPageBreak(true, 15);
+$pdf->AddPage();
+
+// Información del reporte
+$pdf->InfoSection();
+
+// Actividades
+$pdf->TablaActividades($actividades, $totalHoras);
+
+// Combustible
+$pdf->TablaCombustible($combustibles, $totalGalones);
+
+// Observaciones
+$pdf->ObservacionesGenerales($reporte['observaciones_generales']);
+
+// Firma
+$pdf->Firma($reporte['operador_firma'], $reporte['operador'], $reporte['operador_dni']);
+
+// Salida del PDF
+$filename = 'Reporte_' . str_pad($reporteId, 4, '0', STR_PAD_LEFT) . '_' . date('Ymd', strtotime($reporte['fecha'])) . '.pdf';
+$pdf->Output('D', $filename);

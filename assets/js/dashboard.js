@@ -1,14 +1,24 @@
 /**
- * OperaSys - JavaScript del Dashboard
+ * OperaSys - JavaScript del Dashboard con Soporte Offline
  * Archivo: assets/js/dashboard.js
- * Descripción: Carga de estadísticas y gráficos con Chart.js
+ * Descripción: Carga de estadísticas y gráficos con Chart.js + localStorage
  */
 
 // Variables globales para los gráficos
 let graficoReportesMes;
 let graficoEquipos;
 
+// Claves de localStorage
+const KEYS = {
+    ESTADISTICAS: 'dashboard_estadisticas',
+    REPORTES_MES: 'dashboard_reportes_mes',
+    EQUIPOS_USADOS: 'dashboard_equipos_usados',
+    ULTIMOS_REPORTES: 'dashboard_ultimos_reportes',
+    ACTIVIDAD: 'dashboard_actividad'
+};
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Inicializando dashboard...');
     
     // Cargar todas las secciones del dashboard
     cargarEstadisticas();
@@ -19,9 +29,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Si es admin, cargar actividad reciente
     cargarActividadReciente();
     
-    // Actualizar indicador de conexión
-    actualizarEstadoConexion();
-    
     console.log('✓ Dashboard inicializado');
 });
 
@@ -30,8 +37,22 @@ document.addEventListener('DOMContentLoaded', function() {
 // ============================================
 async function cargarEstadisticas() {
     try {
-        const response = await fetch('../../api/dashboard.php?action=estadisticas');
-        const data = await response.json();
+        // Intentar cargar desde API
+        let data;
+        
+        if (navigator.onLine) {
+            const response = await fetch('../../api/dashboard.php?action=estadisticas');
+            data = await response.json();
+            
+            if (data.success) {
+                // Guardar en localStorage
+                localStorage.setItem(KEYS.ESTADISTICAS, JSON.stringify(data));
+            }
+        } else {
+            // Modo offline: cargar desde localStorage
+            const cached = localStorage.getItem(KEYS.ESTADISTICAS);
+            data = cached ? JSON.parse(cached) : { success: false };
+        }
         
         if (data.success) {
             const stats = data.estadisticas;
@@ -57,6 +78,16 @@ async function cargarEstadisticas() {
         }
     } catch (error) {
         console.error('Error al cargar estadísticas:', error);
+        
+        // Intentar cargar desde caché
+        const cached = localStorage.getItem(KEYS.ESTADISTICAS);
+        if (cached) {
+            const data = JSON.parse(cached);
+            if (data.success) {
+                console.log('⚠️ Usando estadísticas en caché (offline)');
+                cargarEstadisticas(); // Llamada recursiva con datos de caché
+            }
+        }
     }
 }
 
@@ -65,8 +96,19 @@ async function cargarEstadisticas() {
 // ============================================
 async function cargarGraficoReportesMes() {
     try {
-        const response = await fetch('../../api/dashboard.php?action=reportes_mes');
-        const data = await response.json();
+        let data;
+        
+        if (navigator.onLine) {
+            const response = await fetch('../../api/dashboard.php?action=reportes_mes');
+            data = await response.json();
+            
+            if (data.success) {
+                localStorage.setItem(KEYS.REPORTES_MES, JSON.stringify(data));
+            }
+        } else {
+            const cached = localStorage.getItem(KEYS.REPORTES_MES);
+            data = cached ? JSON.parse(cached) : { success: false, labels: [], data: [] };
+        }
         
         if (data.success) {
             const ctx = document.getElementById('graficoReportesMes');
@@ -124,8 +166,19 @@ async function cargarGraficoReportesMes() {
 // ============================================
 async function cargarGraficoEquipos() {
     try {
-        const response = await fetch('../../api/dashboard.php?action=equipos_mas_usados');
-        const data = await response.json();
+        let data;
+        
+        if (navigator.onLine) {
+            const response = await fetch('../../api/dashboard.php?action=equipos_mas_usados');
+            data = await response.json();
+            
+            if (data.success) {
+                localStorage.setItem(KEYS.EQUIPOS_USADOS, JSON.stringify(data));
+            }
+        } else {
+            const cached = localStorage.getItem(KEYS.EQUIPOS_USADOS);
+            data = cached ? JSON.parse(cached) : { success: false, labels: [], data: [] };
+        }
         
         if (data.success) {
             const ctx = document.getElementById('graficoEquipos');
@@ -192,8 +245,19 @@ async function cargarGraficoEquipos() {
 // ============================================
 async function cargarUltimosReportes() {
     try {
-        const response = await fetch('../../api/dashboard.php?action=ultimos_reportes');
-        const data = await response.json();
+        let data;
+        
+        if (navigator.onLine) {
+            const response = await fetch('../../api/dashboard.php?action=ultimos_reportes');
+            data = await response.json();
+            
+            if (data.success) {
+                localStorage.setItem(KEYS.ULTIMOS_REPORTES, JSON.stringify(data));
+            }
+        } else {
+            const cached = localStorage.getItem(KEYS.ULTIMOS_REPORTES);
+            data = cached ? JSON.parse(cached) : { success: false, reportes: [] };
+        }
         
         if (data.success) {
             const tbody = document.querySelector('#tablaUltimosReportes tbody');
@@ -213,12 +277,12 @@ async function cargarUltimosReportes() {
                     <td>${reporte.fecha}</td>
                     <td>${reporte.equipo}</td>
                     <td>${reporte.horas}</td>
-                    <td>${reporte.actividad}</td>
+                    <td>${reporte.actividades}</td>
                     <td>${reporte.estado}</td>
                     <td>
-                        <button onclick="verDetalleReporte(${reporte.id})" class="btn btn-sm btn-info">
-                            <i class="fas fa-eye"></i>
-                        </button>
+                        <a href="../reportes/ver.php?id=${reporte.id}" class="btn btn-sm btn-info">
+                            <i class="fas fa-eye"></i> Ver
+                        </a>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -240,8 +304,19 @@ async function cargarActividadReciente() {
         
         if (!lista) return; // No es admin
         
-        const response = await fetch('../../api/dashboard.php?action=actividad_reciente');
-        const data = await response.json();
+        let data;
+        
+        if (navigator.onLine) {
+            const response = await fetch('../../api/dashboard.php?action=actividad_reciente');
+            data = await response.json();
+            
+            if (data.success) {
+                localStorage.setItem(KEYS.ACTIVIDAD, JSON.stringify(data));
+            }
+        } else {
+            const cached = localStorage.getItem(KEYS.ACTIVIDAD);
+            data = cached ? JSON.parse(cached) : { success: false, actividades: [] };
+        }
         
         if (data.success) {
             lista.innerHTML = '';
@@ -277,25 +352,6 @@ async function cargarActividadReciente() {
 }
 
 // ============================================
-// ACTUALIZAR ESTADO DE CONEXIÓN
-// ============================================
-function actualizarEstadoConexion() {
-    const indicador = document.getElementById('estadoConexion');
-    
-    if (!indicador) return;
-    
-    if (navigator.onLine) {
-        indicador.innerHTML = '<i class="fas fa-wifi text-success"></i> <span class="d-none d-sm-inline">Online</span>';
-    } else {
-        indicador.innerHTML = '<i class="fas fa-wifi-slash text-danger"></i> <span class="d-none d-sm-inline">Offline</span>';
-    }
-}
-
-// Eventos de conexión
-window.addEventListener('online', actualizarEstadoConexion);
-window.addEventListener('offline', actualizarEstadoConexion);
-
-// ============================================
 // FUNCIÓN GLOBAL: ACTUALIZAR DASHBOARD
 // ============================================
 function actualizarDashboard() {
@@ -320,20 +376,25 @@ function actualizarDashboard() {
         btn.disabled = false;
         
         // Mostrar notificación
-        if (typeof toastr !== 'undefined') {
-            toastr.success('Dashboard actualizado');
-        }
+        Swal.fire({
+            icon: 'success',
+            title: 'Dashboard actualizado',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000
+        });
     }).catch(error => {
         console.error('Error al actualizar dashboard:', error);
         btn.innerHTML = iconoOriginal;
         btn.disabled = false;
+        
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo actualizar el dashboard'
+        });
     });
 }
-
-// ============================================
-// FUNCIÓN GLOBAL: VER DETALLE DE REPORTE
-// (Usa la función del módulo de reportes)
-// ============================================
-// Ya está definida en reportes.js
 
 console.log('✓ Script de dashboard cargado');

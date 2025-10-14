@@ -1,27 +1,26 @@
 # OperaSys - Configuración Apache
 # Archivo: .htaccess
-# Mejora seguridad, rendimiento y URLs amigables
 
 # ============================================
 # SEGURIDAD
 # ============================================
 
-# Prevenir acceso a archivos sensibles
-<FilesMatch "\.(sql|md|log|env|git|gitignore|htaccess|htpasswd)$">
+# Prevenir acceso EXTERNO a archivos sensibles (pero permitir includes internos)
+<FilesMatch "\.(sql|md|log|env|git|gitignore)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
-# Proteger archivos de configuración
-<Files "config.php">
-    Order allow,deny
-    Deny from all
-</Files>
+# IMPORTANTE: Comentamos estas líneas para que PHP pueda hacer require_once
+# <Files "config.php">
+#     Order allow,deny
+#     Deny from all
+# </Files>
 
-<Files "database.php">
-    Order allow,deny
-    Deny from all
-</Files>
+# <Files "database.php">
+#     Order allow,deny
+#     Deny from all
+# </Files>
 
 # Deshabilitar listado de directorios
 Options -Indexes
@@ -104,20 +103,6 @@ Options -Indexes
     # Forzar HTTPS (descomentar en producción)
     # RewriteCond %{HTTPS} off
     # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-    
-    # Redireccionar www a no-www (opcional)
-    # RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
-    # RewriteRule ^(.*)$ http://%1/$1 [R=301,L]
-</IfModule>
-
-# ============================================
-# PREVENIR HOTLINKING DE IMÁGENES
-# ============================================
-
-<IfModule mod_rewrite.c>
-    RewriteCond %{HTTP_REFERER} !^$
-    RewriteCond %{HTTP_REFERER} !^http(s)?://(www\.)?tudominio.com [NC]
-    RewriteRule \.(jpg|jpeg|png|gif|svg)$ - [NC,F,L]
 </IfModule>
 
 # ============================================

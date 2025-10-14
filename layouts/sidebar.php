@@ -160,6 +160,15 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                                 <p>Auditoría</p>
                             </a>
                         </li>
+                        
+                        <!-- Configuración Empresa (Solo Admin) -->
+                        <li class="nav-item">
+                            <a href="<?php echo $base_path; ?>modules/admin/configuracion_empresa.php"
+                                class="nav-link <?php echo $current_page == 'configuracion_empresa' ? 'active' : ''; ?>">
+                                <i class="nav-icon fas fa-building"></i>
+                                <p>Configuración Empresa</p>
+                            </a>
+                        </li>
                     <?php endif; ?>
 
                 <?php endif; ?>
