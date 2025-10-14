@@ -314,6 +314,28 @@ elseif ($action === 'buscar_por_categoria') {
     }
 }
 
+// obtener_equipos_operador
+elseif ($action === 'obtener_equipos_operador') {
+    // Obtener cargo del usuario
+    $stmt = $pdo->prepare("SELECT cargo FROM usuarios WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $cargo = $stmt->fetch()['cargo'];
+    
+    // Extraer categoría del cargo "Operador de [Categoría]"
+    $categoria = str_replace('Operador de ', '', $cargo);
+    
+    // Si no es operador, mostrar todos
+    if (!str_contains($cargo, 'Operador de')) {
+        $stmt = $pdo->query("SELECT * FROM equipos WHERE estado = 1 ORDER BY codigo");
+    } else {
+        // Si es operador, filtrar por su categoría
+        $stmt = $pdo->prepare("SELECT * FROM equipos WHERE categoria = ? AND estado = 1 ORDER BY codigo");
+        $stmt->execute([$categoria]);
+    }
+    
+    echo json_encode(['success' => true, 'equipos' => $stmt->fetchAll()]);
+}
+
 // ============================================
 // ACCIÓN NO VÁLIDA
 // ============================================

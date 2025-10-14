@@ -109,14 +109,8 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                                         <i class="fas fa-crown nav-icon"></i>
                                         <p>Administradores</p>
                                     </a>
-                                </li>                                
-                                <!-- <li class="nav-item">
-                                    <a href="<?php echo $base_path; ?>modules/usuarios/listar.php"
-                                        class="nav-link <?php echo (!isset($_GET['rol']) && $current_page == 'listar') ? 'active' : ''; ?>">
-                                        <i class="fas fa-list nav-icon text-info"></i>
-                                        <p>Todos los Usuarios</p>
-                                    </a>
-                                </li> -->
+                                </li>                              
+                                
                             </ul>
                         </li>
                     <?php endif; ?>

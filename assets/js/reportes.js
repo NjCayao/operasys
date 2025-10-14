@@ -1,217 +1,302 @@
 /**
  * OperaSys - JavaScript de Reportes
  * Archivo: assets/js/reportes.js
- * Descripción: Crear y listar reportes con geolocalización
+ * Descripción: CRUD completo de reportes con actividades y combustible
  */
+
+// Variables globales
+let reporteActualId = null;
+let tiposTrabajo = [];
+let fasesCosto = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     
-    // ============================================
-    // FORMULARIO CREAR REPORTE
-    // ============================================
-    const formCrear = document.getElementById('formCrearReporte');
+    console.log('✓ Script de reportes cargado');
     
-    if (formCrear) {
-        
-        // Autocompletar hora inicio con hora actual (una sola vez al cargar)
-        const inputHoraInicio = document.getElementById('hora_inicio');
-        if (inputHoraInicio) {
-            const ahora = new Date();
-            const horas = String(ahora.getHours()).padStart(2, '0');
-            const minutos = String(ahora.getMinutes()).padStart(2, '0');
-            inputHoraInicio.value = `${horas}:${minutos}`;
-            console.log('✓ Hora inicio autocompletada:', inputHoraInicio.value);
-        }
-        
-        // Cambio de categoría → Cargar equipos
-        const selectCategoria = document.getElementById('categoria_equipo');
-        const selectEquipo = document.getElementById('equipo_id');
-        
-        selectCategoria.addEventListener('change', async function() {
-            const categoria = this.value;
+    // ============================================
+    // PASO 1: INICIAR REPORTE (crear.php)
+    // ============================================
+    const btnIniciarReporte = document.getElementById('btnIniciarReporte');
+    
+    if (btnIniciarReporte) {
+        btnIniciarReporte.addEventListener('click', async function() {
+            const equipoId = document.getElementById('equipo_id').value;
+            const alertPaso1 = document.getElementById('alertPaso1');
             
-            if (!categoria) {
-                selectEquipo.disabled = true;
-                selectEquipo.innerHTML = '<option value="">Primero seleccione una categoría</option>';
+            if (!equipoId) {
+                mostrarAlerta(alertPaso1, 'Debe seleccionar un equipo', 'danger');
                 return;
             }
             
-            // Mostrar loading
-            selectEquipo.disabled = true;
-            selectEquipo.innerHTML = '<option value="">Cargando equipos...</option>';
+            btnIniciarReporte.disabled = true;
+            btnIniciarReporte.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando reporte...';
+            alertPaso1.style.display = 'none';
             
             try {
-                // Buscar equipos por categoría (función del módulo 3)
-                const response = await fetch(`../../api/equipos.php?action=buscar_por_categoria&categoria=${encodeURIComponent(categoria)}`);
+                const formData = new FormData();
+                formData.append('action', 'crear');
+                formData.append('equipo_id', equipoId);
+                formData.append('fecha', new Date().toISOString().split('T')[0]); // Fecha de hoy
+                
+                const response = await fetch('../../api/reportes.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
                 const data = await response.json();
                 
-                if (data.success && data.equipos.length > 0) {
-                    selectEquipo.innerHTML = '<option value="">Seleccionar equipo</option>';
+                if (data.success) {
+                    reporteActualId = data.reporte_id;
                     
-                    data.equipos.forEach(equipo => {
-                        const option = document.createElement('option');
-                        option.value = equipo.id;
-                        option.textContent = `${equipo.codigo} - ${equipo.descripcion || 'Sin descripción'}`;
-                        selectEquipo.appendChild(option);
-                    });
+                    // Mostrar nombre del equipo seleccionado
+                    const selectEquipo = document.getElementById('equipo_id');
+                    const equipoTexto = selectEquipo.options[selectEquipo.selectedIndex].text;
+                    document.getElementById('equipoSeleccionado').textContent = equipoTexto;
                     
-                    selectEquipo.disabled = false;
+                    // Ocultar paso 1, mostrar paso 2
+                    document.getElementById('paso1').style.display = 'none';
+                    document.getElementById('paso2').style.display = 'block';
+                    
+                    // Cargar catálogos
+                    await cargarTiposTrabajo();
+                    await cargarFasesCosto();
+                    
                 } else {
-                    selectEquipo.innerHTML = '<option value="">No hay equipos disponibles en esta categoría</option>';
+                    throw new Error(data.message);
                 }
                 
             } catch (error) {
-                console.error('Error al cargar equipos:', error);
-                selectEquipo.innerHTML = '<option value="">Error al cargar equipos</option>';
-            }
-        });
-        
-        // Botón obtener ubicación GPS
-        const btnUbicacion = document.getElementById('btnObtenerUbicacion');
-        const inputUbicacion = document.getElementById('ubicacion');
-        
-        if (btnUbicacion) {
-            btnUbicacion.addEventListener('click', function() {
-                
-                if (!navigator.geolocation) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'No disponible',
-                        text: 'Tu navegador no soporta geolocalización'
-                    });
-                    return;
-                }
-                
-                btnUbicacion.disabled = true;
-                btnUbicacion.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obteniendo...';
-                
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        const lat = position.coords.latitude.toFixed(6);
-                        const lng = position.coords.longitude.toFixed(6);
-                        
-                        inputUbicacion.value = `${lat}, ${lng}`;
-                        
-                        btnUbicacion.disabled = false;
-                        btnUbicacion.innerHTML = '<i class="fas fa-check"></i> ¡Obtenida!';
-                        btnUbicacion.classList.remove('btn-info');
-                        btnUbicacion.classList.add('btn-success');
-                        
-                        console.log('✓ Ubicación GPS obtenida:', lat, lng);
-                    },
-                    function(error) {
-                        console.error('Error GPS:', error);
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error de Ubicación',
-                            text: 'No se pudo obtener la ubicación. Verifica los permisos del navegador.'
-                        });
-                        
-                        btnUbicacion.disabled = false;
-                        btnUbicacion.innerHTML = '<i class="fas fa-location-arrow"></i> Reintentar';
-                    }
-                );
-            });
-        }
-        
-        // Submit del formulario
-        formCrear.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const btnSubmit = this.querySelector('button[type="submit"]');
-            const alertMessage = document.getElementById('alertMessage');
-            const alertText = document.getElementById('alertText');
-            
-            // Validar que haya equipo seleccionado
-            if (!selectEquipo.value) {
-                alertMessage.classList.remove('alert-success');
-                alertMessage.classList.add('alert-danger');
-                alertText.textContent = 'Por favor seleccione un equipo';
-                alertMessage.style.display = 'block';
-                return;
-            }
-            
-            // Deshabilitar botón
-            btnSubmit.disabled = true;
-            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
-            alertMessage.style.display = 'none';
-            
-            try {
-                const formData = new FormData(this);
-                formData.append('action', 'crear');
-                
-                // Verificar si hay conexión
-                if (!navigator.onLine) {
-                    // MODO OFFLINE: Guardar en IndexedDB
-                    console.log('⚠ Modo offline - Guardando localmente');
-                    
-                    if (window.OperaSysOffline && window.OperaSysOffline.guardarReporteOffline) {
-                        await window.OperaSysOffline.guardarReporteOffline(formData);
-                        
-                        btnSubmit.innerHTML = '<i class="fas fa-check"></i> ¡Guardado Offline!';
-                        btnSubmit.classList.remove('btn-primary');
-                        btnSubmit.classList.add('btn-warning');
-                        
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Guardado Offline',
-                            html: '<strong>Sin conexión.</strong><br>El reporte se sincronizará automáticamente cuando tengas conexión.',
-                            confirmButtonText: 'Entendido'
-                        }).then(() => {
-                            window.location.href = 'listar.php';
-                        });
-                    } else {
-                        throw new Error('Modo offline no disponible. Por favor conecte a internet.');
-                    }
-                    
-                } else {
-                    // MODO ONLINE: Enviar al servidor
-                    const response = await fetch('../../api/reportes.php', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        btnSubmit.innerHTML = '<i class="fas fa-check"></i> ¡Guardado!';
-                        btnSubmit.classList.remove('btn-primary');
-                        btnSubmit.classList.add('btn-success');
-                        
-                        Swal.fire({
-                            icon: 'success',
-                            title: '¡Éxito!',
-                            text: data.message,
-                            confirmButtonText: 'Ver reportes'
-                        }).then(() => {
-                            window.location.href = 'listar.php';
-                        });
-                    } else {
-                        throw new Error(data.message);
-                    }
-                }
-                
-            } catch (error) {
-                alertMessage.classList.remove('alert-success');
-                alertMessage.classList.add('alert-danger');
-                alertText.textContent = error.message;
-                alertMessage.style.display = 'block';
-                
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = '<i class="fas fa-save"></i> Guardar Reporte';
+                mostrarAlerta(alertPaso1, error.message, 'danger');
+                btnIniciarReporte.disabled = false;
+                btnIniciarReporte.innerHTML = '<i class="fas fa-arrow-right"></i> Iniciar Reporte';
             }
         });
     }
     
     // ============================================
-    // TABLA DE REPORTES (LISTADO)
+    // EDITAR REPORTE: Cargar datos existentes
+    // ============================================
+    const reporteIdInput = document.getElementById('reporte_id');
+    if (reporteIdInput && reporteIdInput.value) {
+        reporteActualId = reporteIdInput.value;
+        cargarDatosReporte();
+    }
+    
+    // ============================================
+    // BOTONES MODALES
+    // ============================================
+    const btnAgregarActividad = document.getElementById('btnAgregarActividad');
+    if (btnAgregarActividad) {
+        btnAgregarActividad.addEventListener('click', function() {
+            limpiarFormularioActividad();
+            $('#modalActividad').modal('show');
+        });
+    }
+    
+    const btnAgregarCombustible = document.getElementById('btnAgregarCombustible');
+    if (btnAgregarCombustible) {
+        btnAgregarCombustible.addEventListener('click', function() {
+            document.getElementById('formCombustible').reset();
+            $('#modalCombustible').modal('show');
+        });
+    }
+    
+    // ============================================
+    // FORMULARIO AGREGAR ACTIVIDAD
+    // ============================================
+    const formActividad = document.getElementById('formActividad');
+    if (formActividad) {
+        formActividad.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const alertActividad = document.getElementById('alertActividad');
+            const btnSubmit = this.querySelector('button[type="submit"]');
+            
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+            alertActividad.style.display = 'none';
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'agregar_actividad');
+                formData.append('reporte_id', reporteActualId);
+                formData.append('tipo_trabajo_id', document.getElementById('tipo_trabajo_id').value);
+                formData.append('fase_costo_id', document.getElementById('fase_costo_id').value);
+                formData.append('horometro_inicial', document.getElementById('horometro_inicial').value);
+                formData.append('horometro_final', document.getElementById('horometro_final').value);
+                formData.append('observaciones', document.getElementById('observaciones_actividad').value);
+                
+                const response = await fetch('../../api/reportes.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    $('#modalActividad').modal('hide');
+                    await cargarActividadesReporte();
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: '¡Actividad agregada!',
+                        text: data.message,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    throw new Error(data.message);
+                }
+                
+            } catch (error) {
+                mostrarAlerta(alertActividad, error.message, 'danger');
+            } finally {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="fas fa-save"></i> Guardar Actividad';
+            }
+        });
+    }
+    
+    // ============================================
+    // FORMULARIO AGREGAR COMBUSTIBLE
+    // ============================================
+    const formCombustible = document.getElementById('formCombustible');
+    if (formCombustible) {
+        formCombustible.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const alertCombustible = document.getElementById('alertCombustible');
+            const btnSubmit = this.querySelector('button[type="submit"]');
+            
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+            alertCombustible.style.display = 'none';
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'agregar_combustible');
+                formData.append('reporte_id', reporteActualId);
+                formData.append('horometro', document.getElementById('horometro_combustible').value);
+                formData.append('galones', document.getElementById('galones').value);
+                formData.append('observaciones', document.getElementById('observaciones_combustible').value);
+                
+                const response = await fetch('../../api/reportes.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    $('#modalCombustible').modal('hide');
+                    await cargarCombustiblesReporte();
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: '¡Combustible registrado!',
+                        text: data.message,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    throw new Error(data.message);
+                }
+                
+            } catch (error) {
+                mostrarAlerta(alertCombustible, error.message, 'danger');
+            } finally {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="fas fa-save"></i> Guardar';
+            }
+        });
+    }
+    
+    // ============================================
+    // BOTÓN FINALIZAR REPORTE
+    // ============================================
+    const btnFinalizarReporte = document.getElementById('btnFinalizarReporte');
+    if (btnFinalizarReporte) {
+        btnFinalizarReporte.addEventListener('click', async function() {
+            
+            const result = await Swal.fire({
+                title: '¿Finalizar reporte?',
+                html: 'Una vez finalizado, <strong>no podrá editarlo</strong>.<br>¿Está seguro?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, finalizar',
+                cancelButtonText: 'Cancelar'
+            });
+            
+            if (!result.isConfirmed) return;
+            
+            btnFinalizarReporte.disabled = true;
+            btnFinalizarReporte.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizando...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'finalizar');
+                formData.append('reporte_id', reporteActualId);
+                formData.append('observaciones_generales', document.getElementById('observaciones_generales').value);
+                
+                const response = await fetch('../../api/reportes.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: '¡Reporte finalizado!',
+                        text: data.message,
+                        confirmButtonText: 'Ver reportes'
+                    }).then(() => {
+                        window.location.href = 'listar.php';
+                    });
+                } else {
+                    throw new Error(data.message);
+                }
+                
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: error.message
+                });
+                btnFinalizarReporte.disabled = false;
+                btnFinalizarReporte.innerHTML = '<i class="fas fa-check"></i> Finalizar y Enviar';
+            }
+        });
+    }
+    
+    // ============================================
+    // BOTÓN GUARDAR BORRADOR / CAMBIOS
+    // ============================================
+    const btnGuardarBorrador = document.getElementById('btnGuardarBorrador');
+    const btnGuardarCambios = document.getElementById('btnGuardarCambios');
+    
+    if (btnGuardarBorrador || btnGuardarCambios) {
+        const btn = btnGuardarBorrador || btnGuardarCambios;
+        
+        btn.addEventListener('click', async function() {
+            
+            Swal.fire({
+                icon: 'success',
+                title: 'Cambios guardados',
+                text: 'El reporte se ha guardado como borrador',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        });
+    }
+    
+    // ============================================
+    // DATATABLE - LISTADO DE REPORTES
     // ============================================
     if (document.getElementById('tablaReportes')) {
-        
-        // Cargar estadísticas
-        cargarEstadisticas();
-        
-        // Inicializar DataTable
         const tabla = $('#tablaReportes').DataTable({
             ajax: {
                 url: '../../api/reportes.php?action=listar',
@@ -221,35 +306,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 { title: 'ID' },
                 { title: 'Fecha' },
                 { title: 'Equipo' },
-                { title: 'Hora Inicio' },
-                { title: 'Hora Fin' },
+                { title: 'Actividades' },
                 { title: 'Horas' },
-                { title: 'Actividad' },
                 { title: 'Estado' },
                 { title: 'Acciones', orderable: false, searchable: false }
             ],
             language: {
                 "decimal": "",
-                "emptyTable": "No hay datos disponibles en la tabla",
+                "emptyTable": "No hay datos disponibles",
                 "info": "Mostrando _START_ a _END_ de _TOTAL_ registros",
                 "infoEmpty": "Mostrando 0 a 0 de 0 registros",
-                "infoFiltered": "(filtrado de _MAX_ registros totales)",
-                "infoPostFix": "",
-                "thousands": ",",
+                "infoFiltered": "(filtrado de _MAX_ registros)",
                 "lengthMenu": "Mostrar _MENU_ registros",
                 "loadingRecords": "Cargando...",
                 "processing": "Procesando...",
                 "search": "Buscar:",
-                "zeroRecords": "No se encontraron registros coincidentes",
+                "zeroRecords": "No se encontraron registros",
                 "paginate": {
                     "first": "Primero",
                     "last": "Último",
                     "next": "Siguiente",
                     "previous": "Anterior"
-                },
-                "aria": {
-                    "sortAscending": ": activar para ordenar la columna ascendente",
-                    "sortDescending": ": activar para ordenar la columna descendente"
                 }
             },
             order: [[0, 'desc']],
@@ -263,75 +340,314 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ============================================
-// FUNCIÓN: CARGAR ESTADÍSTICAS
+// FUNCIONES AUXILIARES
 // ============================================
-async function cargarEstadisticas() {
+
+/**
+ * Cargar tipos de trabajo desde la API
+ */
+async function cargarTiposTrabajo() {
     try {
-        const response = await fetch('../../api/reportes.php?action=estadisticas');
+        const response = await fetch('../../api/tipos_trabajo.php?action=listar&para_select=1');
         const data = await response.json();
         
         if (data.success) {
-            const stats = data.estadisticas;
+            tiposTrabajo = data.tipos;
+            const select = document.getElementById('tipo_trabajo_id');
+            select.innerHTML = '<option value="">Seleccionar tipo de trabajo</option>';
             
-            document.getElementById('totalReportes').textContent = stats.total_reportes;
-            document.getElementById('reportesHoy').textContent = stats.reportes_hoy;
-            document.getElementById('horasTrabajadas').textContent = stats.horas_mes;
-            document.getElementById('pendientesSinc').textContent = stats.pendientes_sinc;
+            tiposTrabajo.forEach(tipo => {
+                if (tipo.estado == 1) {
+                    const option = document.createElement('option');
+                    option.value = tipo.id;
+                    option.textContent = tipo.nombre;
+                    select.appendChild(option);
+                }
+            });
             
-            console.log('✓ Estadísticas cargadas:', stats);
+            console.log('✓ Tipos de trabajo cargados:', tiposTrabajo.length);
         }
     } catch (error) {
-        console.error('Error al cargar estadísticas:', error);
+        console.error('Error al cargar tipos de trabajo:', error);
     }
 }
 
-// ============================================
-// FUNCIÓN GLOBAL: VER DETALLE DE REPORTE
-// ============================================
-async function verDetalleReporte(id) {
-    // Redirigir a la página de ver detalle
-    window.location.href = `ver.php?id=${id}`;
+/**
+ * Cargar fases de costo desde la API
+ */
+async function cargarFasesCosto() {
+    try {
+        const response = await fetch('../../api/fases_costo.php?action=listar&para_select=1');
+        const data = await response.json();
+        
+        if (data.success) {
+            fasesCosto = data.fases;
+            const select = document.getElementById('fase_costo_id');
+            select.innerHTML = '<option value="">Seleccionar fase de costo</option>';
+            
+            fasesCosto.forEach(fase => {
+                if (fase.estado == 1) {
+                    const option = document.createElement('option');
+                    option.value = fase.id;
+                    option.textContent = fase.codigo + ' - ' + fase.descripcion;
+                    select.appendChild(option);
+                }
+            });
+            
+            console.log('✓ Fases de costo cargadas:', fasesCosto.length);
+        }
+    } catch (error) {
+        console.error('Error al cargar fases de costo:', error);
+    }
 }
 
-// ============================================
-// FUNCIÓN GLOBAL: DESCARGAR PDF
-// ============================================
-function descargarPDF(id) {
-    // Verificar que el ID sea válido
-    if (!id) {
+/**
+ * Cargar datos del reporte para editar
+ */
+async function cargarDatosReporte() {
+    try {
+        // Cargar catálogos primero
+        await cargarTiposTrabajo();
+        await cargarFasesCosto();
+        
+        // Cargar actividades y combustibles
+        await cargarActividadesReporte();
+        await cargarCombustiblesReporte();
+        
+        console.log('✓ Datos del reporte cargados');
+        
+    } catch (error) {
+        console.error('Error al cargar datos del reporte:', error);
+    }
+}
+
+/**
+ * Cargar actividades del reporte
+ */
+async function cargarActividadesReporte() {
+    try {
+        const response = await fetch(`../../api/reportes.php?action=obtener_reporte&id=${reporteActualId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const actividades = data.actividades;
+            const container = document.getElementById('listaActividades');
+            
+            if (actividades.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center"><i class="fas fa-info-circle"></i> No hay actividades registradas.</p>';
+                return;
+            }
+            
+            let html = '<div class="table-responsive"><table class="table table-bordered table-hover">';
+            html += '<thead class="thead-light"><tr>';
+            html += '<th width="5%">#</th>';
+            html += '<th>Tipo de Trabajo</th>';
+            html += '<th>Fase de Costo</th>';
+            html += '<th width="12%">Horómetro Inicial</th>';
+            html += '<th width="12%">Horómetro Final</th>';
+            html += '<th width="10%">Horas</th>';
+            html += '<th>Observaciones</th>';
+            html += '<th width="10%">Acción</th>';
+            html += '</tr></thead><tbody>';
+            
+            actividades.forEach((act, index) => {
+                html += `<tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${act.tipo_trabajo}</td>
+                    <td><strong>${act.fase_codigo}</strong><br><small class="text-muted">${act.fase_descripcion}</small></td>
+                    <td class="text-center">${parseFloat(act.horometro_inicial).toFixed(1)}</td>
+                    <td class="text-center">${parseFloat(act.horometro_final).toFixed(1)}</td>
+                    <td class="text-center"><span class="badge badge-info">${parseFloat(act.horas_trabajadas).toFixed(2)} hrs</span></td>
+                    <td>${act.observaciones || '<em class="text-muted">Sin observaciones</em>'}</td>
+                    <td class="text-center">
+                        <button onclick="eliminarActividad(${act.id})" class="btn btn-sm btn-danger" title="Eliminar">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar actividades:', error);
+    }
+}
+
+/**
+ * Cargar combustibles del reporte
+ */
+async function cargarCombustiblesReporte() {
+    try {
+        const response = await fetch(`../../api/reportes.php?action=obtener_reporte&id=${reporteActualId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const combustibles = data.combustibles;
+            const container = document.getElementById('listaCombustible');
+            
+            if (combustibles.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center"><i class="fas fa-info-circle"></i> No hay abastecimientos registrados.</p>';
+                return;
+            }
+            
+            let html = '<div class="table-responsive"><table class="table table-bordered table-hover">';
+            html += '<thead class="thead-light"><tr>';
+            html += '<th width="10%">#</th>';
+            html += '<th>Horómetro</th>';
+            html += '<th>Galones</th>';
+            html += '<th>Fecha/Hora</th>';
+            html += '<th>Observaciones</th>';
+            html += '<th width="10%">Acción</th>';
+            html += '</tr></thead><tbody>';
+            
+            combustibles.forEach((comb, index) => {
+                const fecha = new Date(comb.fecha_hora);
+                const fechaFormato = fecha.toLocaleString('es-PE');
+                
+                html += `<tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td class="text-center">${parseFloat(comb.horometro).toFixed(1)}</td>
+                    <td class="text-center"><strong>${parseFloat(comb.galones).toFixed(2)}</strong> gal</td>
+                    <td>${fechaFormato}</td>
+                    <td>${comb.observaciones || '<em class="text-muted">Sin observaciones</em>'}</td>
+                    <td class="text-center">
+                        <button onclick="eliminarCombustible(${comb.id})" class="btn btn-sm btn-danger" title="Eliminar">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar combustibles:', error);
+    }
+}
+
+/**
+ * Limpiar formulario de actividad
+ */
+function limpiarFormularioActividad() {
+    document.getElementById('formActividad').reset();
+    document.getElementById('actividad_id').value = '';
+    document.getElementById('tituloModalActividad').textContent = 'Agregar Actividad';
+}
+
+/**
+ * Eliminar actividad
+ */
+async function eliminarActividad(actividadId) {
+    const result = await Swal.fire({
+        title: '¿Eliminar actividad?',
+        text: 'Esta acción no se puede deshacer',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    try {
+        const formData = new FormData();
+        formData.append('action', 'eliminar_actividad');
+        formData.append('actividad_id', actividadId);
+        
+        const response = await fetch('../../api/reportes.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await cargarActividadesReporte();
+            Swal.fire({
+                icon: 'success',
+                title: 'Eliminado',
+                text: data.message,
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } else {
+            throw new Error(data.message);
+        }
+        
+    } catch (error) {
         Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: 'ID de reporte no válido'
+            text: error.message
         });
-        return;
     }
-    
-    // Mostrar indicador de carga
-    Swal.fire({
-        title: 'Generando PDF...',
-        html: 'Por favor espera mientras se genera el documento',
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
+}
+
+/**
+ * Eliminar combustible
+ */
+async function eliminarCombustible(combustibleId) {
+    const result = await Swal.fire({
+        title: '¿Eliminar registro?',
+        text: 'Esta acción no se puede deshacer',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
     });
     
-    // Abrir PDF en nueva pestaña
-    window.open('../../api/pdf.php?id=' + id, '_blank');
+    if (!result.isConfirmed) return;
     
-    // Cerrar el indicador después de 2 segundos
-    setTimeout(() => {
-        Swal.close();
-    }, 2000);
+    try {
+        const formData = new FormData();
+        formData.append('action', 'eliminar_combustible');
+        formData.append('combustible_id', combustibleId);
+        
+        const response = await fetch('../../api/reportes.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await cargarCombustiblesReporte();
+            Swal.fire({
+                icon: 'success',
+                title: 'Eliminado',
+                text: data.message,
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } else {
+            throw new Error(data.message);
+        }
+        
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: error.message
+        });
+    }
 }
 
-// ============================================
-// FUNCIÓN AUXILIAR: FORMATEAR FECHA
-// ============================================
-function formatearFecha(fecha) {
-    const opciones = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(fecha + 'T00:00:00').toLocaleDateString('es-ES', opciones);
+/**
+ * Mostrar alerta en un elemento
+ */
+function mostrarAlerta(elemento, mensaje, tipo) {
+    elemento.className = `alert alert-${tipo}`;
+    elemento.textContent = mensaje;
+    elemento.style.display = 'block';
 }
 
-console.log('✓ Script de reportes cargado');
+console.log('✓ Funciones de reportes disponibles');

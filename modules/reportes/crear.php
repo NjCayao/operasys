@@ -359,6 +359,5 @@ include '../../layouts/sidebar.php';
 </div>
 
 <?php 
-$custom_js_file = 'assets/js/editar_usuario.js?v=' . ASSETS_VERSION;
 include '../../layouts/footer.php'; 
 ?>
