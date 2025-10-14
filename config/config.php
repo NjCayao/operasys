@@ -14,7 +14,7 @@ define('SITE_NAME', 'OperaSys');
 define('SITE_VERSION', '1.0');
 
 // Versión de assets (cambiar cuando actualices JS/CSS)
-define('ASSETS_VERSION', '1.0.6');
+define('ASSETS_VERSION', '1.0.8');
 
 // Zona horaria
 date_default_timezone_set('America/Lima');

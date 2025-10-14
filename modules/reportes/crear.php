@@ -3,6 +3,7 @@
  * OperaSys - Crear Reporte Diario
  * Archivo: modules/reportes/crear.php
  * Descripción: Formulario con actividades dinámicas y combustible
+ * MODIFICADO: Select de equipos filtrado por categoría del operador
  */
 
 require_once '../../config/config.php';
@@ -57,41 +58,26 @@ include '../../layouts/sidebar.php';
                         </div>
                         <div class="card-body">
                             <p class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
                                 Seleccione el equipo con el que trabajará hoy. 
                                 <strong>La fecha se registrará automáticamente como hoy (<?php echo date('d/m/Y'); ?>)</strong>
                             </p>
+                            
+                            <?php if ($_SESSION['rol'] === 'operador'): ?>
+                            <div class="alert alert-info">
+                                <i class="fas fa-filter"></i> 
+                                <strong>Filtrado automático:</strong> Solo se muestran los equipos de tu categoría asignada
+                            </div>
+                            <?php endif; ?>
                             
                             <div class="form-group">
                                 <label for="equipo_id">
                                     <i class="fas fa-truck-monster"></i> Equipo <span class="text-danger">*</span>
                                 </label>
                                 <select class="form-control form-control-lg" id="equipo_id" required>
-                                    <option value="">Seleccionar equipo</option>
-                                    <?php
-                                    // Obtener equipos activos
-                                    $stmt = $pdo->query("
-                                        SELECT id, categoria, codigo, descripcion 
-                                        FROM equipos 
-                                        WHERE estado = 1 
-                                        ORDER BY categoria, codigo
-                                    ");
-                                    $equipos = $stmt->fetchAll();
-                                    
-                                    $categoriaActual = '';
-                                    foreach ($equipos as $equipo) {
-                                        if ($categoriaActual !== $equipo['categoria']) {
-                                            if ($categoriaActual !== '') echo '</optgroup>';
-                                            echo '<optgroup label="' . htmlspecialchars($equipo['categoria']) . '">';
-                                            $categoriaActual = $equipo['categoria'];
-                                        }
-                                        echo '<option value="' . $equipo['id'] . '">' 
-                                            . htmlspecialchars($equipo['codigo']) . ' - ' 
-                                            . htmlspecialchars($equipo['descripcion'] ?? 'Sin descripción') 
-                                            . '</option>';
-                                    }
-                                    if ($categoriaActual !== '') echo '</optgroup>';
-                                    ?>
+                                    <option value="">Cargando tus equipos...</option>
                                 </select>
+                                <small class="form-text text-muted" id="infoCategoria"></small>
                             </div>
                             
                             <div id="alertPaso1" class="alert" style="display: none;"></div>

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * OperaSys - Listado de Reportes
  * Archivo: modules/reportes/listar.php
@@ -44,7 +45,7 @@ include '../../layouts/sidebar.php';
     <!-- Main content -->
     <section class="content">
         <div class="container-fluid">
-            
+
             <!-- Botón Crear Reporte -->
             <div class="row mb-3">
                 <div class="col-12">
@@ -62,25 +63,30 @@ include '../../layouts/sidebar.php';
                     </h3>
                 </div>
                 <div class="card-body">
-                    <table id="tablaReportes" class="table table-bordered table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Fecha</th>
-                                <?php if ($_SESSION['rol'] === 'admin' || $_SESSION['rol'] === 'supervisor'): ?>
-                                <th>Operador</th>
-                                <?php endif; ?>
-                                <th>Equipo</th>
-                                <th>Actividades</th>
-                                <th>Horas Totales</th>
-                                <th>Estado</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Se llena con DataTables via AJAX -->
-                        </tbody>
-                    </table>
+                    <div class="card-body">
+                        <table id="tablaReportes"
+                            class="table table-bordered table-striped table-hover"
+                            data-user-rol="<?php echo $_SESSION['rol']; ?>"
+                            style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Fecha</th>
+                                    <?php if ($_SESSION['rol'] === 'admin' || $_SESSION['rol'] === 'supervisor'): ?>
+                                        <th>Operador</th>
+                                    <?php endif; ?>
+                                    <th>Equipo</th>
+                                    <th>Actividades</th>
+                                    <th>Horas</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- DataTables carga los datos aquí -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -88,6 +94,6 @@ include '../../layouts/sidebar.php';
     </section>
 </div>
 
-<?php 
-include '../../layouts/footer.php'; 
+<?php
+include '../../layouts/footer.php';
 ?>

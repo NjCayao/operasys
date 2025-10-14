@@ -1,4 +1,5 @@
 <?php
+
 /**
  * OperaSys - Editar Reporte
  * Archivo: modules/reportes/editar.php
@@ -34,24 +35,23 @@ try {
     ");
     $stmt->execute([$reporteId]);
     $reporte = $stmt->fetch();
-    
+
     if (!$reporte) {
         header('Location: listar.php?error=reporte_no_encontrado');
         exit;
     }
-    
+
     // Verificar permisos
     if ($reporte['usuario_id'] != $_SESSION['user_id'] && $_SESSION['rol'] !== 'admin') {
         header('Location: listar.php?error=sin_permisos');
         exit;
     }
-    
+
     // Solo admin puede editar reportes finalizados
     if ($reporte['estado'] === 'finalizado' && $_SESSION['rol'] !== 'admin') {
         header('Location: ver.php?id=' . $reporteId);
         exit;
     }
-    
 } catch (PDOException $e) {
     die('Error: ' . $e->getMessage());
 }
@@ -91,17 +91,17 @@ include '../../layouts/sidebar.php';
     <!-- Main content -->
     <section class="content">
         <div class="container-fluid">
-            
+
             <input type="hidden" id="reporte_id" value="<?php echo $reporte['id']; ?>">
-            
+
             <div class="row mb-3">
                 <div class="col-12">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
-                        <strong>Reporte:</strong> 
-                        Fecha: <strong><?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?></strong> | 
+                        <strong>Reporte:</strong>
+                        Fecha: <strong><?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?></strong> |
                         Equipo: <strong><?php echo htmlspecialchars($reporte['equipo_categoria'] . ' - ' . $reporte['equipo_codigo']); ?></strong> |
-                        Estado: 
+                        Estado:
                         <?php if ($reporte['estado'] === 'finalizado'): ?>
                             <span class="badge badge-success">Finalizado</span>
                             <?php if ($_SESSION['rol'] === 'admin'): ?>
@@ -116,7 +116,7 @@ include '../../layouts/sidebar.php';
 
             <div class="row">
                 <div class="col-12">
-                    
+
                     <!-- Botones de Acción -->
                     <div class="mb-3">
                         <button type="button" id="btnAgregarActividad" class="btn btn-success">
@@ -172,10 +172,10 @@ include '../../layouts/sidebar.php';
                             </h3>
                         </div>
                         <div class="card-body">
-                            <textarea class="form-control" 
-                                      id="observaciones_generales" 
-                                      rows="4"
-                                      placeholder="Observaciones generales del día de trabajo (opcional)"><?php echo htmlspecialchars($reporte['observaciones_generales'] ?? ''); ?></textarea>
+                            <textarea class="form-control"
+                                id="observaciones_generales"
+                                rows="4"
+                                placeholder="Observaciones generales del día de trabajo (opcional)"><?php echo htmlspecialchars($reporte['observaciones_generales'] ?? ''); ?></textarea>
                         </div>
                     </div>
 
@@ -188,11 +188,20 @@ include '../../layouts/sidebar.php';
                             <button type="button" id="btnFinalizarReporte" class="btn btn-success btn-lg">
                                 <i class="fas fa-check"></i> Finalizar y Enviar
                             </button>
-                        <?php else: ?>
-                            <button type="button" id="btnGuardarCambios" class="btn btn-primary btn-lg">
-                                <i class="fas fa-save"></i> Guardar Cambios (Admin)
+
+                            <!-- NUEVO: Botón eliminar (solo si NO tiene actividades) -->
+                            <button type="button" id="btnEliminarReporte" class="btn btn-danger btn-lg" style="display: none;">
+                                <i class="fas fa-trash"></i> Eliminar Reporte
                             </button>
+
+                        <?php else: ?>
+                            <?php if ($_SESSION['rol'] === 'admin'): ?>
+                                <button type="button" id="btnGuardarCambios" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-save"></i> Guardar Cambios (Admin)
+                                </button>
+                            <?php endif; ?>
                         <?php endif; ?>
+
                         <a href="listar.php" class="btn btn-secondary btn-lg">
                             <i class="fas fa-times"></i> Cancelar
                         </a>
@@ -220,7 +229,7 @@ include '../../layouts/sidebar.php';
             <form id="formActividad">
                 <input type="hidden" id="actividad_id">
                 <div class="modal-body">
-                    
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
@@ -250,12 +259,12 @@ include '../../layouts/sidebar.php';
                                 <label>
                                     <i class="fas fa-tachometer-alt"></i> Horómetro Inicial <span class="text-danger">*</span>
                                 </label>
-                                <input type="number" 
-                                       class="form-control" 
-                                       id="horometro_inicial" 
-                                       step="0.1" 
-                                       placeholder="Ej: 1584.5"
-                                       required>
+                                <input type="number"
+                                    class="form-control"
+                                    id="horometro_inicial"
+                                    step="0.1"
+                                    placeholder="Ej: 1584.5"
+                                    required>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -263,12 +272,12 @@ include '../../layouts/sidebar.php';
                                 <label>
                                     <i class="fas fa-tachometer-alt"></i> Horómetro Final <span class="text-danger">*</span>
                                 </label>
-                                <input type="number" 
-                                       class="form-control" 
-                                       id="horometro_final" 
-                                       step="0.1" 
-                                       placeholder="Ej: 1585.9"
-                                       required>
+                                <input type="number"
+                                    class="form-control"
+                                    id="horometro_final"
+                                    step="0.1"
+                                    placeholder="Ej: 1585.9"
+                                    required>
                             </div>
                         </div>
                     </div>
@@ -277,10 +286,10 @@ include '../../layouts/sidebar.php';
                         <label>
                             <i class="fas fa-comment"></i> Observaciones
                         </label>
-                        <textarea class="form-control" 
-                                  id="observaciones_actividad" 
-                                  rows="2"
-                                  placeholder="Detalles adicionales (opcional)"></textarea>
+                        <textarea class="form-control"
+                            id="observaciones_actividad"
+                            rows="2"
+                            placeholder="Detalles adicionales (opcional)"></textarea>
                     </div>
 
                     <div id="alertActividad" class="alert" style="display: none;"></div>
@@ -313,39 +322,39 @@ include '../../layouts/sidebar.php';
             </div>
             <form id="formCombustible">
                 <div class="modal-body">
-                    
+
                     <div class="form-group">
                         <label>
                             <i class="fas fa-tachometer-alt"></i> Horómetro <span class="text-danger">*</span>
                         </label>
-                        <input type="number" 
-                               class="form-control" 
-                               id="horometro_combustible" 
-                               step="0.1" 
-                               placeholder="Ej: 1586.5"
-                               required>
+                        <input type="number"
+                            class="form-control"
+                            id="horometro_combustible"
+                            step="0.1"
+                            placeholder="Ej: 1586.5"
+                            required>
                     </div>
 
                     <div class="form-group">
                         <label>
                             <i class="fas fa-gas-pump"></i> Galones <span class="text-danger">*</span>
                         </label>
-                        <input type="number" 
-                               class="form-control" 
-                               id="galones" 
-                               step="0.01" 
-                               placeholder="Ej: 45.00"
-                               required>
+                        <input type="number"
+                            class="form-control"
+                            id="galones"
+                            step="0.01"
+                            placeholder="Ej: 45.00"
+                            required>
                     </div>
 
                     <div class="form-group">
                         <label>
                             <i class="fas fa-comment"></i> Observaciones
                         </label>
-                        <textarea class="form-control" 
-                                  id="observaciones_combustible" 
-                                  rows="2"
-                                  placeholder="Detalles adicionales (opcional)"></textarea>
+                        <textarea class="form-control"
+                            id="observaciones_combustible"
+                            rows="2"
+                            placeholder="Detalles adicionales (opcional)"></textarea>
                     </div>
 
                     <div id="alertCombustible" class="alert" style="display: none;"></div>
@@ -364,6 +373,6 @@ include '../../layouts/sidebar.php';
     </div>
 </div>
 
-<?php 
-include '../../layouts/footer.php'; 
+<?php
+include '../../layouts/footer.php';
 ?>

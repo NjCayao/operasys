@@ -109,8 +109,35 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                                         <i class="fas fa-crown nav-icon"></i>
                                         <p>Administradores</p>
                                     </a>
-                                </li>                              
-                                
+                                </li>
+
+                            </ul>
+                        </li>
+
+                        <!-- Catálogos (Solo Admin) -->
+                        <li class="nav-item has-treeview">
+                            <a href="#" class="nav-link">
+                                <i class="nav-icon fas fa-cogs"></i>
+                                <p>
+                                    Catálogos
+                                    <i class="fas fa-angle-left right"></i>
+                                </p>
+                            </a>
+                            <ul class="nav nav-treeview">
+                                <li class="nav-item">
+                                    <a href="<?php echo $base_path; ?>modules/admin/tipos_trabajo.php"
+                                        class="nav-link <?php echo $current_page == 'tipos_trabajo' ? 'active' : ''; ?>">
+                                        <i class="fas fa-tasks nav-icon"></i>
+                                        <p>Tipos de Trabajo</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="<?php echo $base_path; ?>modules/admin/fases_costo.php"
+                                        class="nav-link <?php echo $current_page == 'fases_costo' ? 'active' : ''; ?>">
+                                        <i class="fas fa-tag nav-icon"></i>
+                                        <p>Fases de Costo</p>
+                                    </a>
+                                </li>
                             </ul>
                         </li>
                     <?php endif; ?>

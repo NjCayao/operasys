@@ -2,7 +2,7 @@
 /**
  * OperaSys - API de Equipos
  * Archivo: api/equipos.php
- * Descripción: CRUD completo de equipos
+ * Descripción: Gestión de equipos con filtrado por categoría del operador
  */
 
 require_once '../config/database.php';
@@ -21,21 +21,84 @@ $userId = $_SESSION['user_id'];
 $userRol = $_SESSION['rol'];
 
 // ============================================
-// LISTAR EQUIPOS (Con DataTables)
+// OBTENER EQUIPOS FILTRADOS POR OPERADOR
 // ============================================
-if ($action === 'listar') {
+if ($action === 'obtener_equipos_operador') {
+    
+    try {
+        // Obtener cargo del usuario actual
+        $stmt = $pdo->prepare("SELECT cargo FROM usuarios WHERE id = ?");
+        $stmt->execute([$userId]);
+        $usuario = $stmt->fetch();
+        
+        if (!$usuario) {
+            echo json_encode(['success' => false, 'message' => 'Usuario no encontrado']);
+            exit;
+        }
+        
+        $cargo = $usuario['cargo'];
+        
+        // Si es Admin o Supervisor → Mostrar TODOS los equipos
+        if ($userRol === 'admin' || $userRol === 'supervisor') {
+            $stmt = $pdo->query("
+                SELECT id, categoria, codigo, descripcion 
+                FROM equipos 
+                WHERE estado = 1 
+                ORDER BY categoria, codigo
+            ");
+        } 
+        // Si es Operador → Filtrar por su categoría
+        elseif (strpos($cargo, 'Operador de ') === 0) {
+            // Extraer categoría del cargo: "Operador de Excavadora" → "Excavadora"
+            $categoria = str_replace('Operador de ', '', $cargo);
+            
+            $stmt = $pdo->prepare("
+                SELECT id, categoria, codigo, descripcion 
+                FROM equipos 
+                WHERE categoria = ? AND estado = 1 
+                ORDER BY codigo
+            ");
+            $stmt->execute([$categoria]);
+        } 
+        // Otro tipo de usuario → Mostrar todos
+        else {
+            $stmt = $pdo->query("
+                SELECT id, categoria, codigo, descripcion 
+                FROM equipos 
+                WHERE estado = 1 
+                ORDER BY categoria, codigo
+            ");
+        }
+        
+        $equipos = $stmt->fetchAll();
+        
+        echo json_encode([
+            'success' => true,
+            'equipos' => $equipos,
+            'categoria_operador' => $categoria ?? 'Todos'
+        ]);
+        
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Error al obtener equipos: ' . $e->getMessage()]);
+    }
+}
+
+// ============================================
+// LISTAR TODOS LOS EQUIPOS (ADMIN)
+// ============================================
+elseif ($action === 'listar') {
     
     try {
         $stmt = $pdo->query("
             SELECT 
                 id, 
-                categoria, 
+                categoria,
                 codigo, 
-                descripcion, 
-                estado, 
+                descripcion,
+                estado,
                 DATE_FORMAT(fecha_creacion, '%d/%m/%Y') as fecha_creacion
             FROM equipos 
-            ORDER BY id DESC
+            ORDER BY categoria, codigo
         ");
         
         $equipos = $stmt->fetchAll();
@@ -47,25 +110,24 @@ if ($action === 'listar') {
                 ? '<span class="badge badge-success">Activo</span>' 
                 : '<span class="badge badge-danger">Inactivo</span>';
             
-            // Botones de acción según rol
+            // Botones de acción (solo admin)
             $acciones = '';
-            if ($userRol === 'admin' || $userRol === 'supervisor') {
-                $acciones .= '<a href="editar.php?id=' . $equipo['id'] . '" class="btn btn-sm btn-warning" title="Editar">
+            if ($userRol === 'admin') {
+                $acciones .= '<button onclick="editarEquipo(' . $equipo['id'] . ')" 
+                    class="btn btn-sm btn-warning" title="Editar">
                     <i class="fas fa-edit"></i>
-                </a> ';
+                </button> ';
                 
-                if ($userRol === 'admin') {
-                    $acciones .= '<button onclick="eliminarEquipo(' . $equipo['id'] . ', \'' . htmlspecialchars($equipo['codigo']) . '\')" 
-                        class="btn btn-sm btn-danger" title="Eliminar">
-                        <i class="fas fa-trash"></i>
-                    </button>';
-                }
+                $acciones .= '<button onclick="eliminarEquipo(' . $equipo['id'] . ', \'' . htmlspecialchars($equipo['codigo']) . '\')" 
+                    class="btn btn-sm btn-danger" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                </button>';
             }
             
             $data[] = [
                 $equipo['id'],
-                $equipo['categoria'],
-                '<strong>' . $equipo['codigo'] . '</strong>',
+                '<strong>' . htmlspecialchars($equipo['categoria']) . '</strong>',
+                htmlspecialchars($equipo['codigo']),
                 $equipo['descripcion'] ?? '-',
                 $estadoBadge,
                 $equipo['fecha_creacion'],
@@ -88,9 +150,9 @@ if ($action === 'listar') {
 // ============================================
 elseif ($action === 'crear') {
     
-    // Verificar permisos
-    if ($userRol !== 'admin' && $userRol !== 'supervisor') {
-        echo json_encode(['success' => false, 'message' => 'No tienes permisos para agregar equipos']);
+    // Solo admin
+    if ($userRol !== 'admin') {
+        echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
         exit;
     }
     
@@ -103,31 +165,25 @@ elseif ($action === 'crear') {
     $codigo = strtoupper(trim($_POST['codigo'] ?? ''));
     $descripcion = trim($_POST['descripcion'] ?? '');
     
-    // Validaciones
     if (empty($categoria) || empty($codigo)) {
         echo json_encode(['success' => false, 'message' => 'Categoría y código son obligatorios']);
         exit;
     }
     
-    if (!preg_match('/^[A-Z0-9]+$/', $codigo)) {
-        echo json_encode(['success' => false, 'message' => 'El código solo debe contener letras mayúsculas y números']);
-        exit;
-    }
-    
     try {
-        // Verificar si el código ya existe
+        // Verificar si ya existe el código
         $stmt = $pdo->prepare("SELECT id FROM equipos WHERE codigo = ?");
         $stmt->execute([$codigo]);
         
         if ($stmt->fetch()) {
-            echo json_encode(['success' => false, 'message' => 'El código ' . $codigo . ' ya está registrado']);
+            echo json_encode(['success' => false, 'message' => 'Ya existe un equipo con ese código']);
             exit;
         }
         
-        // Insertar equipo
+        // Insertar
         $stmt = $pdo->prepare("
-            INSERT INTO equipos (categoria, codigo, descripcion, estado) 
-            VALUES (?, ?, ?, 1)
+            INSERT INTO equipos (categoria, codigo, descripcion) 
+            VALUES (?, ?, ?)
         ");
         
         if ($stmt->execute([$categoria, $codigo, $descripcion])) {
@@ -142,15 +198,15 @@ elseif ($action === 'crear') {
             
             echo json_encode([
                 'success' => true,
-                'message' => 'Equipo registrado correctamente',
+                'message' => 'Equipo creado correctamente',
                 'equipo_id' => $equipoId
             ]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al registrar equipo']);
+            echo json_encode(['success' => false, 'message' => 'Error al crear equipo']);
         }
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Error del servidor']);
     }
 }
 
@@ -159,9 +215,9 @@ elseif ($action === 'crear') {
 // ============================================
 elseif ($action === 'actualizar') {
     
-    // Verificar permisos
-    if ($userRol !== 'admin' && $userRol !== 'supervisor') {
-        echo json_encode(['success' => false, 'message' => 'No tienes permisos para editar equipos']);
+    // Solo admin
+    if ($userRol !== 'admin') {
+        echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
         exit;
     }
     
@@ -176,28 +232,22 @@ elseif ($action === 'actualizar') {
     $descripcion = trim($_POST['descripcion'] ?? '');
     $estado = $_POST['estado'] ?? 1;
     
-    // Validaciones
     if (!$equipoId || empty($categoria) || empty($codigo)) {
         echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
         exit;
     }
     
-    if (!preg_match('/^[A-Z0-9]+$/', $codigo)) {
-        echo json_encode(['success' => false, 'message' => 'El código solo debe contener letras mayúsculas y números']);
-        exit;
-    }
-    
     try {
-        // Verificar si el código ya existe en otro equipo
+        // Verificar si existe otro con el mismo código
         $stmt = $pdo->prepare("SELECT id FROM equipos WHERE codigo = ? AND id != ?");
         $stmt->execute([$codigo, $equipoId]);
         
         if ($stmt->fetch()) {
-            echo json_encode(['success' => false, 'message' => 'El código ' . $codigo . ' ya está en uso por otro equipo']);
+            echo json_encode(['success' => false, 'message' => 'Ya existe otro equipo con ese código']);
             exit;
         }
         
-        // Actualizar equipo
+        // Actualizar
         $stmt = $pdo->prepare("
             UPDATE equipos 
             SET categoria = ?, codigo = ?, descripcion = ?, estado = ? 
@@ -218,7 +268,7 @@ elseif ($action === 'actualizar') {
                 'message' => 'Equipo actualizado correctamente'
             ]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al actualizar equipo']);
+            echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
         }
         
     } catch (PDOException $e) {
@@ -227,26 +277,28 @@ elseif ($action === 'actualizar') {
 }
 
 // ============================================
-// ELIMINAR EQUIPO (Soft delete)
+// ELIMINAR EQUIPO
 // ============================================
 elseif ($action === 'eliminar') {
     
-    // Solo admin puede eliminar
+    // Solo admin
     if ($userRol !== 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Solo el administrador puede eliminar equipos']);
+        echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
         exit;
     }
     
     $equipoId = $_POST['id'] ?? 0;
     
     if (!$equipoId) {
-        echo json_encode(['success' => false, 'message' => 'ID de equipo no válido']);
+        echo json_encode(['success' => false, 'message' => 'ID no válido']);
         exit;
     }
     
     try {
-        // Verificar si el equipo tiene reportes asociados
-        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM reportes WHERE equipo_id = ?");
+        // Verificar si tiene reportes asociados
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) as total FROM reportes WHERE equipo_id = ?
+        ");
         $stmt->execute([$equipoId]);
         $result = $stmt->fetch();
         
@@ -257,7 +309,7 @@ elseif ($action === 'eliminar') {
             
             echo json_encode([
                 'success' => true,
-                'message' => 'El equipo tiene reportes asociados. Se ha desactivado en lugar de eliminarse.'
+                'message' => 'El equipo tiene reportes asociados. Se ha desactivado.'
             ]);
         } else {
             // Eliminar permanentemente
@@ -278,62 +330,39 @@ elseif ($action === 'eliminar') {
         $stmtAudit->execute([$userId, "Equipo ID: $equipoId"]);
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error al eliminar equipo']);
+        echo json_encode(['success' => false, 'message' => 'Error al eliminar']);
     }
 }
 
 // ============================================
-// BUSCAR POR CATEGORÍA (Para formulario de reportes)
+// OBTENER UN EQUIPO PARA EDITAR
 // ============================================
-elseif ($action === 'buscar_por_categoria') {
+elseif ($action === 'obtener') {
     
-    $categoria = $_GET['categoria'] ?? '';
+    $equipoId = $_GET['id'] ?? 0;
     
-    if (empty($categoria)) {
-        echo json_encode(['success' => false, 'message' => 'Categoría no especificada']);
+    if (!$equipoId) {
+        echo json_encode(['success' => false, 'message' => 'ID no válido']);
         exit;
     }
     
     try {
-        $stmt = $pdo->prepare("
-            SELECT id, codigo, descripcion 
-            FROM equipos 
-            WHERE categoria = ? AND estado = 1
-            ORDER BY codigo ASC
-        ");
-        $stmt->execute([$categoria]);
-        $equipos = $stmt->fetchAll();
+        $stmt = $pdo->prepare("SELECT * FROM equipos WHERE id = ?");
+        $stmt->execute([$equipoId]);
+        $equipo = $stmt->fetch();
         
-        echo json_encode([
-            'success' => true,
-            'equipos' => $equipos
-        ]);
+        if ($equipo) {
+            echo json_encode([
+                'success' => true,
+                'equipo' => $equipo
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Equipo no encontrado']);
+        }
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error al buscar equipos']);
+        echo json_encode(['success' => false, 'message' => 'Error al obtener equipo']);
     }
-}
-
-// obtener_equipos_operador
-elseif ($action === 'obtener_equipos_operador') {
-    // Obtener cargo del usuario
-    $stmt = $pdo->prepare("SELECT cargo FROM usuarios WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $cargo = $stmt->fetch()['cargo'];
-    
-    // Extraer categoría del cargo "Operador de [Categoría]"
-    $categoria = str_replace('Operador de ', '', $cargo);
-    
-    // Si no es operador, mostrar todos
-    if (!str_contains($cargo, 'Operador de')) {
-        $stmt = $pdo->query("SELECT * FROM equipos WHERE estado = 1 ORDER BY codigo");
-    } else {
-        // Si es operador, filtrar por su categoría
-        $stmt = $pdo->prepare("SELECT * FROM equipos WHERE categoria = ? AND estado = 1 ORDER BY codigo");
-        $stmt->execute([$categoria]);
-    }
-    
-    echo json_encode(['success' => true, 'equipos' => $stmt->fetchAll()]);
 }
 
 // ============================================

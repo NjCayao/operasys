@@ -1,8 +1,9 @@
 <?php
+
 /**
- * OperaSys - Generación de PDF
+ * OperaSys - Generador de PDF
  * Archivo: api/pdf.php
- * Descripción: Genera PDF de reportes con firma digital usando FPDF
+ * Descripción: Genera PDF de reportes finalizados
  */
 
 require_once '../config/database.php';
@@ -10,7 +11,7 @@ require_once '../config/config.php';
 
 // Verificar sesión
 if (!isset($_SESSION['user_id'])) {
-    die('Sesión no válida');
+    die('Sesión no válida. <a href="../modules/auth/login.php">Ir al login</a>');
 }
 
 $reporteId = $_GET['id'] ?? 0;
@@ -19,20 +20,18 @@ if (!$reporteId) {
     die('ID de reporte no válido');
 }
 
-// Obtener datos del reporte
 try {
+    // Obtener datos del reporte
     $stmt = $pdo->prepare("
         SELECT 
             r.*,
             u.nombre_completo as operador,
-            u.cargo as operador_cargo,
             u.dni as operador_dni,
+            u.cargo as operador_cargo,
             u.firma as operador_firma,
             e.codigo as equipo_codigo,
             e.categoria as equipo_categoria,
-            e.descripcion as equipo_descripcion,
-            e.marca as equipo_marca,
-            e.modelo as equipo_modelo
+            e.descripcion as equipo_descripcion
         FROM reportes r
         INNER JOIN usuarios u ON r.usuario_id = u.id
         INNER JOIN equipos e ON r.equipo_id = e.id
@@ -40,244 +39,399 @@ try {
     ");
     $stmt->execute([$reporteId]);
     $reporte = $stmt->fetch();
-    
+
     if (!$reporte) {
         die('Reporte no encontrado');
     }
-    
+
     // Verificar permisos
-    $userId = $_SESSION['user_id'];
     $userRol = $_SESSION['rol'];
-    
+    $userId = $_SESSION['user_id'];
+
     if ($reporte['usuario_id'] != $userId && $userRol !== 'admin' && $userRol !== 'supervisor') {
-        die('No tienes permisos para descargar este reporte');
+        die('No tiene permisos para ver este reporte');
     }
-    
-} catch (PDOException $e) {
-    die('Error al obtener reporte');
-}
 
-// ============================================
-// CONFIGURAR FPDF
-// ============================================
-require_once '../vendor/fpdf/fpdf.php';
-
-class PDF extends FPDF {
-    
-    // Encabezado
-    function Header() {
-        // Logo (si existe)
-        // $this->Image('logo.png', 10, 6, 30);
-        
-        // Título
-        $this->SetFont('Arial', 'B', 16);
-        $this->SetTextColor(46, 134, 171); // Color azul
-        $this->Cell(0, 10, 'REPORTE DE OPERACION', 0, 1, 'C');
-        
-        $this->SetFont('Arial', '', 10);
-        $this->SetTextColor(100, 100, 100);
-        $this->Cell(0, 5, 'Sistema OperaSys', 0, 1, 'C');
-        
-        $this->Ln(5);
-        
-        // Línea divisoria
-        $this->SetDrawColor(46, 134, 171);
-        $this->SetLineWidth(0.5);
-        $this->Line(10, $this->GetY(), 200, $this->GetY());
-        $this->Ln(5);
-    }
-    
-    // Pie de página
-    function Footer() {
-        $this->SetY(-15);
-        $this->SetFont('Arial', 'I', 8);
-        $this->SetTextColor(128, 128, 128);
-        $this->Cell(0, 10, 'Pagina ' . $this->PageNo() . ' - Generado el ' . date('d/m/Y H:i'), 0, 0, 'C');
-    }
-    
-    // Función para crear secciones
-    function SeccionTitulo($titulo) {
-        $this->SetFont('Arial', 'B', 12);
-        $this->SetFillColor(46, 134, 171);
-        $this->SetTextColor(255, 255, 255);
-        $this->Cell(0, 8, $titulo, 0, 1, 'L', true);
-        $this->Ln(2);
-    }
-    
-    // Función para campos de información
-    function Campo($etiqueta, $valor) {
-        $this->SetFont('Arial', 'B', 10);
-        $this->SetTextColor(60, 60, 60);
-        $this->Cell(50, 6, $etiqueta . ':', 0, 0);
-        
-        $this->SetFont('Arial', '', 10);
-        $this->SetTextColor(0, 0, 0);
-        $this->MultiCell(0, 6, $valor);
-    }
-}
-
-// ============================================
-// CREAR PDF
-// ============================================
-$pdf = new PDF();
-$pdf->AddPage();
-$pdf->SetAutoPageBreak(true, 20);
-
-// ============================================
-// INFORMACIÓN DEL REPORTE
-// ============================================
-$pdf->SeccionTitulo('INFORMACION DEL REPORTE');
-
-$pdf->Campo('Reporte N', str_pad($reporte['id'], 6, '0', STR_PAD_LEFT));
-$pdf->Campo('Fecha', date('d/m/Y', strtotime($reporte['fecha'])));
-$pdf->Campo('Hora Inicio', $reporte['hora_inicio']);
-$pdf->Campo('Hora Fin', $reporte['hora_fin'] ?: 'En curso');
-
-if ($reporte['horas_trabajadas']) {
-    $pdf->Campo('Horas Trabajadas', number_format($reporte['horas_trabajadas'], 2) . ' hrs');
-}
-
-$pdf->Campo('Estado', $reporte['estado_sinc'] === 'sincronizado' ? 'Sincronizado' : 'Pendiente');
-
-$pdf->Ln(5);
-
-// ============================================
-// INFORMACIÓN DEL OPERADOR
-// ============================================
-$pdf->SeccionTitulo('OPERADOR RESPONSABLE');
-
-$pdf->Campo('Nombre', $reporte['operador']);
-$pdf->Campo('DNI', $reporte['operador_dni']);
-$pdf->Campo('Cargo', $reporte['operador_cargo']);
-
-$pdf->Ln(5);
-
-// ============================================
-// INFORMACIÓN DEL EQUIPO
-// ============================================
-$pdf->SeccionTitulo('EQUIPO UTILIZADO');
-
-$pdf->Campo('Categoria', $reporte['equipo_categoria']);
-$pdf->Campo('Codigo', $reporte['equipo_codigo']);
-$pdf->Campo('Descripcion', $reporte['equipo_descripcion'] ?: 'N/A');
-$pdf->Campo('Marca', $reporte['equipo_marca'] ?: 'N/A');
-$pdf->Campo('Modelo', $reporte['equipo_modelo'] ?: 'N/A');
-
-$pdf->Ln(5);
-
-// ============================================
-// ACTIVIDAD REALIZADA
-// ============================================
-$pdf->SeccionTitulo('ACTIVIDAD REALIZADA');
-
-$pdf->SetFont('Arial', '', 10);
-$pdf->SetTextColor(0, 0, 0);
-$pdf->MultiCell(0, 6, $reporte['actividad']);
-
-$pdf->Ln(5);
-
-// ============================================
-// OBSERVACIONES
-// ============================================
-if ($reporte['observaciones']) {
-    $pdf->SeccionTitulo('OBSERVACIONES');
-    
-    $pdf->SetFont('Arial', '', 10);
-    $pdf->SetTextColor(0, 0, 0);
-    $pdf->MultiCell(0, 6, $reporte['observaciones']);
-    
-    $pdf->Ln(5);
-}
-
-// ============================================
-// UBICACIÓN GPS
-// ============================================
-if ($reporte['ubicacion']) {
-    $pdf->SeccionTitulo('UBICACION GPS');
-    
-    $pdf->Campo('Coordenadas', $reporte['ubicacion']);
-    
-    $pdf->Ln(5);
-}
-
-// ============================================
-// FIRMA DIGITAL
-// ============================================
-$pdf->Ln(10);
-$pdf->SeccionTitulo('FIRMA DEL OPERADOR');
-
-if ($reporte['operador_firma']) {
-    // Decodificar firma base64
-    $firmaData = $reporte['operador_firma'];
-    
-    // Eliminar el prefijo data:image/png;base64, si existe
-    if (strpos($firmaData, 'data:image/png;base64,') === 0) {
-        $firmaData = substr($firmaData, strlen('data:image/png;base64,'));
-    }
-    
-    // Decodificar base64
-    $firmaDecoded = base64_decode($firmaData);
-    
-    // Guardar temporalmente
-    $tempFile = tempnam(sys_get_temp_dir(), 'firma_') . '.png';
-    file_put_contents($tempFile, $firmaDecoded);
-    
-    // Insertar imagen de firma
-    $pdf->Image($tempFile, 15, $pdf->GetY(), 60, 20);
-    
-    // Eliminar archivo temporal
-    unlink($tempFile);
-    
-    $pdf->Ln(22);
-    
-    // Línea de firma
-    $pdf->SetDrawColor(0, 0, 0);
-    $pdf->SetLineWidth(0.2);
-    $pdf->Line(15, $pdf->GetY(), 75, $pdf->GetY());
-    
-    $pdf->Ln(2);
-    $pdf->SetFont('Arial', '', 9);
-    $pdf->SetTextColor(60, 60, 60);
-    $pdf->Cell(60, 5, $reporte['operador'], 0, 1, 'C');
-    $pdf->Cell(60, 5, $reporte['operador_cargo'], 0, 1, 'C');
-    $pdf->Cell(60, 5, 'DNI: ' . $reporte['operador_dni'], 0, 1, 'C');
-    
-} else {
-    $pdf->SetFont('Arial', 'I', 10);
-    $pdf->SetTextColor(200, 0, 0);
-    $pdf->Cell(0, 6, 'El operador no ha registrado su firma digital', 0, 1);
-}
-
-// ============================================
-// CUADRO DE VALIDACIÓN (Pie del documento)
-// ============================================
-$pdf->Ln(10);
-
-$pdf->SetDrawColor(180, 180, 180);
-$pdf->SetLineWidth(0.2);
-$pdf->Rect(10, $pdf->GetY(), 190, 25);
-
-$pdf->SetFont('Arial', 'I', 8);
-$pdf->SetTextColor(100, 100, 100);
-$pdf->Cell(0, 5, '', 0, 1);
-$pdf->Cell(0, 5, 'Este documento es una representacion digital del reporte de operacion.', 0, 1, 'C');
-$pdf->Cell(0, 5, 'Generado automaticamente por OperaSys el ' . date('d/m/Y H:i:s'), 0, 1, 'C');
-$pdf->Cell(0, 5, 'Codigo de verificacion: ' . strtoupper(md5($reporte['id'] . $reporte['fecha'])), 0, 1, 'C');
-
-// ============================================
-// SALIDA DEL PDF
-// ============================================
-$nombreArchivo = 'Reporte_' . str_pad($reporte['id'], 6, '0', STR_PAD_LEFT) . '_' . date('Ymd', strtotime($reporte['fecha'])) . '.pdf';
-
-$pdf->Output('D', $nombreArchivo);
-
-// Registrar en auditoría
-try {
-    $stmtAudit = $pdo->prepare("
-        INSERT INTO auditoria (usuario_id, accion, detalle) 
-        VALUES (?, 'descargar_pdf', ?)
+    // Obtener actividades
+    $stmtActividades = $pdo->prepare("
+        SELECT 
+            rd.*,
+            tt.nombre as tipo_trabajo,
+            fc.codigo as fase_codigo,
+            fc.descripcion as fase_descripcion
+        FROM reportes_detalle rd
+        INNER JOIN tipos_trabajo tt ON rd.tipo_trabajo_id = tt.id
+        INNER JOIN fases_costo fc ON rd.fase_costo_id = fc.id
+        WHERE rd.reporte_id = ?
+        ORDER BY rd.orden ASC
     ");
-    $stmtAudit->execute([$userId, "Reporte ID: $reporteId"]);
+    $stmtActividades->execute([$reporteId]);
+    $actividades = $stmtActividades->fetchAll();
+
+    // Obtener combustibles
+    $stmtCombustible = $pdo->prepare("
+        SELECT * FROM reportes_combustible 
+        WHERE reporte_id = ?
+        ORDER BY fecha_hora ASC
+    ");
+    $stmtCombustible->execute([$reporteId]);
+    $combustibles = $stmtCombustible->fetchAll();
+
+    // Calcular totales
+    $totalHoras = 0;
+    $totalGalones = 0;
+    foreach ($actividades as $act) {
+        $totalHoras += $act['horas_trabajadas'];
+    }
+    foreach ($combustibles as $comb) {
+        $totalGalones += $comb['galones'];
+    }
 } catch (PDOException $e) {
-    // Error silencioso en auditoría
+    die('Error al obtener datos: ' . $e->getMessage());
 }
+
+// Configurar headers para PDF
+header('Content-Type: text/html; charset=utf-8');
+?>
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte #<?php echo $reporte['id']; ?> - <?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #333;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #2E86AB;
+            padding-bottom: 15px;
+        }
+
+        .header h1 {
+            color: #2E86AB;
+            font-size: 24pt;
+            margin-bottom: 5px;
+        }
+
+        .header h2 {
+            color: #666;
+            font-size: 14pt;
+            font-weight: normal;
+        }
+
+        .info-section {
+            margin-bottom: 20px;
+        }
+
+        .info-section h3 {
+            background-color: #2E86AB;
+            color: white;
+            padding: 8px 12px;
+            font-size: 12pt;
+            margin-bottom: 10px;
+        }
+
+        .info-grid {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .info-row {
+            display: table-row;
+        }
+
+        .info-label {
+            display: table-cell;
+            font-weight: bold;
+            width: 30%;
+            padding: 5px 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .info-value {
+            display: table-cell;
+            padding: 5px 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        table th {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            font-size: 10pt;
+        }
+
+        table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            font-size: 10pt;
+        }
+
+        table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .total-row {
+            background-color: #e3f2fd !important;
+            font-weight: bold;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 9pt;
+            font-weight: bold;
+        }
+
+        .badge-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .badge-warning {
+            background-color: #ffc107;
+            color: #333;
+        }
+
+        .badge-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .observaciones {
+            border: 1px solid #ddd;
+            padding: 12px;
+            background-color: #f9f9f9;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+
+        .firma-section {
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .firma-img {
+            max-width: 200px;
+            max-height: 80px;
+            border: 1px solid #ddd;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 9pt;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        @media print {
+            body {
+                padding: 10px;
+            }
+
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>OperaSys</h1>
+        <h2>Reporte Diario de Operaciones</h2>
+    </div>
+
+    <!-- Información General -->
+    <div class="info-section">
+        <h3>📋 Información del Reporte</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 33.33%; padding: 8px; border: 1px solid #ddd; vertical-align: top;">
+                    <strong style="color: #2E86AB;">📋 General</strong><br>
+                    <strong>Reporte N°:</strong> #<?php echo str_pad($reporte['id'], 4, '0', STR_PAD_LEFT); ?><br>
+                    <strong>Fecha:</strong> <?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?><br>
+                    <strong>Estado:</strong>
+                    <?php if ($reporte['estado'] === 'finalizado'): ?>
+                        <span class="badge badge-success">Finalizado</span>
+                    <?php else: ?>
+                        <span class="badge badge-warning">Borrador</span>
+                    <?php endif; ?>
+                </td>
+                <td style="width: 33.33%; padding: 8px; border: 1px solid #ddd; vertical-align: top;">
+                    <strong style="color: #2E86AB;">👤 Operador</strong><br>
+                    <strong>Nombre:</strong> <?php echo htmlspecialchars($reporte['operador']); ?><br>
+                    <strong>DNI:</strong> <?php echo htmlspecialchars($reporte['operador_dni']); ?><br>
+                    <strong>Cargo:</strong> <?php echo htmlspecialchars($reporte['operador_cargo']); ?>
+                </td>
+                <td style="width: 33.33%; padding: 8px; border: 1px solid #ddd; vertical-align: top;">
+                    <strong style="color: #2E86AB;">🚜 Equipo</strong><br>
+                    <strong>Categoría:</strong> <?php echo htmlspecialchars($reporte['equipo_categoria']); ?><br>
+                    <strong>Código:</strong> <?php echo htmlspecialchars($reporte['equipo_codigo']); ?>
+                    <?php if ($reporte['equipo_descripcion']): ?>
+                        <br><strong>Descripción:</strong> <?php echo htmlspecialchars($reporte['equipo_descripcion']); ?>
+                    <?php endif; ?>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Actividades -->
+    <div class="info-section">
+        <h3>📊 Actividades Realizadas</h3>
+        <?php if (empty($actividades)): ?>
+            <p style="text-align: center; color: #999;">No hay actividades registradas</p>
+        <?php else: ?>
+            <table>
+                <thead>
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="20%">Tipo de Trabajo</th>
+                        <th width="25%">Fase de Costo</th>
+                        <th width="12%" class="text-center">H. Inicial</th>
+                        <th width="12%" class="text-center">H. Final</th>
+                        <th width="10%" class="text-center">Horas</th>
+                        <th>Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($actividades as $index => $act): ?>
+                        <tr>
+                            <td class="text-center"><?php echo $index + 1; ?></td>
+                            <td><?php echo htmlspecialchars($act['tipo_trabajo']); ?></td>
+                            <td>
+                                <strong><?php echo htmlspecialchars($act['fase_codigo']); ?></strong><br>
+                                <small style="color: #666;"><?php echo htmlspecialchars($act['fase_descripcion']); ?></small>
+                            </td>
+                            <td class="text-center"><?php echo number_format($act['horometro_inicial'], 1); ?></td>
+                            <td class="text-center"><?php echo number_format($act['horometro_final'], 1); ?></td>
+                            <td class="text-center">
+                                <span class="badge badge-info"><?php echo number_format($act['horas_trabajadas'], 2); ?> hrs</span>
+                            </td>
+                            <td><?php echo $act['observaciones'] ? htmlspecialchars($act['observaciones']) : '-'; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <tr class="total-row">
+                        <td colspan="5" class="text-right">TOTAL HORAS TRABAJADAS:</td>
+                        <td class="text-center">
+                            <span class="badge badge-success"><?php echo number_format($totalHoras, 2); ?> hrs</span>
+                        </td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
+
+    <!-- Combustible -->
+    <?php if (!empty($combustibles)): ?>
+        <div class="info-section">
+            <h3>⛽ Abastecimiento de Combustible</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th width="8%">#</th>
+                        <th width="18%" class="text-center">Horómetro</th>
+                        <th width="18%" class="text-center">Galones</th>
+                        <th width="25%">Fecha/Hora</th>
+                        <th>Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($combustibles as $index => $comb): ?>
+                        <tr>
+                            <td class="text-center"><?php echo $index + 1; ?></td>
+                            <td class="text-center"><?php echo number_format($comb['horometro'], 1); ?></td>
+                            <td class="text-center"><strong><?php echo number_format($comb['galones'], 2); ?></strong> gal</td>
+                            <td><?php echo date('d/m/Y H:i', strtotime($comb['fecha_hora'])); ?></td>
+                            <td><?php echo $comb['observaciones'] ? htmlspecialchars($comb['observaciones']) : '-'; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <tr class="total-row">
+                        <td colspan="2" class="text-right">TOTAL GALONES:</td>
+                        <td class="text-center">
+                            <span class="badge badge-info"><?php echo number_format($totalGalones, 2); ?> gal</span>
+                        </td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Observaciones Generales -->
+    <?php if (!empty($reporte['observaciones_generales'])): ?>
+        <div class="info-section">
+            <h3>💬 Observaciones Generales</h3>
+            <div class="observaciones">
+                <?php echo nl2br(htmlspecialchars($reporte['observaciones_generales'])); ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <!-- Firma del Operador -->
+    <?php if ($reporte['operador_firma']): ?>
+        <div class="firma-section">
+            <p><strong>Firma del Operador:</strong></p>
+            <img src="<?php echo $reporte['operador_firma']; ?>" alt="Firma" class="firma-img">
+            <p><?php echo htmlspecialchars($reporte['operador']); ?></p>
+            <p style="font-size: 9pt; color: #666;">DNI: <?php echo htmlspecialchars($reporte['operador_dni']); ?></p>
+        </div>
+    <?php endif; ?>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p><strong>OperaSys</strong> - Sistema de Reportes de Operaciones</p>
+        <p>Generado el: <?php echo date('d/m/Y H:i:s'); ?></p>
+    </div>
+
+    <!-- Botones de acción (no se imprimen) -->
+    <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()" style="padding: 10px 20px; background-color: #2E86AB; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12pt;">
+            🖨️ Imprimir / Guardar PDF
+        </button>
+        <button onclick="window.close()" style="padding: 10px 20px; background-color: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12pt; margin-left: 10px;">
+            ❌ Cerrar
+        </button>
+    </div>
+
+</body>
+
+</html>
