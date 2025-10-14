@@ -13,6 +13,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (formCrear) {
         
+        // Autocompletar hora inicio con hora actual (una sola vez al cargar)
+        const inputHoraInicio = document.getElementById('hora_inicio');
+        if (inputHoraInicio) {
+            const ahora = new Date();
+            const horas = String(ahora.getHours()).padStart(2, '0');
+            const minutos = String(ahora.getMinutes()).padStart(2, '0');
+            inputHoraInicio.value = `${horas}:${minutos}`;
+            console.log('✓ Hora inicio autocompletada:', inputHoraInicio.value);
+        }
+        
         // Cambio de categoría → Cargar equipos
         const selectCategoria = document.getElementById('categoria_equipo');
         const selectEquipo = document.getElementById('equipo_id');
@@ -64,7 +74,11 @@ document.addEventListener('DOMContentLoaded', function() {
             btnUbicacion.addEventListener('click', function() {
                 
                 if (!navigator.geolocation) {
-                    alert('Tu navegador no soporta geolocalización');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'No disponible',
+                        text: 'Tu navegador no soporta geolocalización'
+                    });
                     return;
                 }
                 
@@ -87,7 +101,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     function(error) {
                         console.error('Error GPS:', error);
-                        alert('No se pudo obtener la ubicación. Verifica los permisos del navegador.');
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error de Ubicación',
+                            text: 'No se pudo obtener la ubicación. Verifica los permisos del navegador.'
+                        });
                         
                         btnUbicacion.disabled = false;
                         btnUbicacion.innerHTML = '<i class="fas fa-location-arrow"></i> Reintentar';
@@ -127,20 +145,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     // MODO OFFLINE: Guardar en IndexedDB
                     console.log('⚠ Modo offline - Guardando localmente');
                     
-                    await window.OperaSysOffline.guardarReporteOffline(formData);
-                    
-                    btnSubmit.innerHTML = '<i class="fas fa-check"></i> ¡Guardado Offline!';
-                    btnSubmit.classList.remove('btn-primary');
-                    btnSubmit.classList.add('btn-warning');
-                    
-                    alertMessage.classList.remove('alert-danger');
-                    alertMessage.classList.add('alert-warning');
-                    alertText.innerHTML = '<strong>Guardado offline.</strong> El reporte se sincronizará automáticamente cuando tengas conexión.';
-                    alertMessage.style.display = 'block';
-                    
-                    setTimeout(() => {
-                        window.location.href = 'listar.php';
-                    }, 2000);
+                    if (window.OperaSysOffline && window.OperaSysOffline.guardarReporteOffline) {
+                        await window.OperaSysOffline.guardarReporteOffline(formData);
+                        
+                        btnSubmit.innerHTML = '<i class="fas fa-check"></i> ¡Guardado Offline!';
+                        btnSubmit.classList.remove('btn-primary');
+                        btnSubmit.classList.add('btn-warning');
+                        
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Guardado Offline',
+                            html: '<strong>Sin conexión.</strong><br>El reporte se sincronizará automáticamente cuando tengas conexión.',
+                            confirmButtonText: 'Entendido'
+                        }).then(() => {
+                            window.location.href = 'listar.php';
+                        });
+                    } else {
+                        throw new Error('Modo offline no disponible. Por favor conecte a internet.');
+                    }
                     
                 } else {
                     // MODO ONLINE: Enviar al servidor
@@ -156,14 +178,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         btnSubmit.classList.remove('btn-primary');
                         btnSubmit.classList.add('btn-success');
                         
-                        alertMessage.classList.remove('alert-danger');
-                        alertMessage.classList.add('alert-success');
-                        alertText.textContent = data.message;
-                        alertMessage.style.display = 'block';
-                        
-                        setTimeout(() => {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Éxito!',
+                            text: data.message,
+                            confirmButtonText: 'Ver reportes'
+                        }).then(() => {
                             window.location.href = 'listar.php';
-                        }, 2000);
+                        });
                     } else {
                         throw new Error(data.message);
                     }
@@ -207,7 +229,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 { title: 'Acciones', orderable: false, searchable: false }
             ],
             language: {
-                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
+                "decimal": "",
+                "emptyTable": "No hay datos disponibles en la tabla",
+                "info": "Mostrando _START_ a _END_ de _TOTAL_ registros",
+                "infoEmpty": "Mostrando 0 a 0 de 0 registros",
+                "infoFiltered": "(filtrado de _MAX_ registros totales)",
+                "infoPostFix": "",
+                "thousands": ",",
+                "lengthMenu": "Mostrar _MENU_ registros",
+                "loadingRecords": "Cargando...",
+                "processing": "Procesando...",
+                "search": "Buscar:",
+                "zeroRecords": "No se encontraron registros coincidentes",
+                "paginate": {
+                    "first": "Primero",
+                    "last": "Último",
+                    "next": "Siguiente",
+                    "previous": "Anterior"
+                },
+                "aria": {
+                    "sortAscending": ": activar para ordenar la columna ascendente",
+                    "sortDescending": ": activar para ordenar la columna descendente"
+                }
             },
             order: [[0, 'desc']],
             responsive: true,
@@ -235,11 +278,7 @@ async function cargarEstadisticas() {
             document.getElementById('horasTrabajadas').textContent = stats.horas_mes;
             document.getElementById('pendientesSinc').textContent = stats.pendientes_sinc;
             
-            // Actualizar indicador de sincronización
-            const indicador = document.getElementById('estadoSincronizacion');
-            if (stats.pendientes_sinc > 0) {
-                indicador.innerHTML = '<i class="fas fa-sync text-warning"></i> <span class="d-none d-sm-inline">' + stats.pendientes_sinc + ' pendientes</span>';
-            }
+            console.log('✓ Estadísticas cargadas:', stats);
         }
     } catch (error) {
         console.error('Error al cargar estadísticas:', error);
@@ -250,44 +289,8 @@ async function cargarEstadisticas() {
 // FUNCIÓN GLOBAL: VER DETALLE DE REPORTE
 // ============================================
 async function verDetalleReporte(id) {
-    try {
-        const response = await fetch(`../../api/reportes.php?action=detalle&id=${id}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            const r = data.reporte;
-            
-            // Crear modal con SweetAlert2
-            Swal.fire({
-                title: 'Reporte #' + r.id,
-                html: `
-                    <div class="text-left">
-                        <p><strong>Fecha:</strong> ${formatearFecha(r.fecha)}</p>
-                        <p><strong>Operador:</strong> ${r.operador} (${r.operador_cargo})</p>
-                        <p><strong>Equipo:</strong> ${r.equipo_categoria} - ${r.equipo_codigo}</p>
-                        <p><strong>Horario:</strong> ${r.hora_inicio} - ${r.hora_fin || 'En curso'}</p>
-                        <p><strong>Horas trabajadas:</strong> ${r.horas_trabajadas ? r.horas_trabajadas + ' hrs' : '-'}</p>
-                        <hr>
-                        <p><strong>Actividad:</strong></p>
-                        <p>${r.actividad}</p>
-                        ${r.observaciones ? '<p><strong>Observaciones:</strong></p><p>' + r.observaciones + '</p>' : ''}
-                        ${r.ubicacion ? '<p><strong>Ubicación GPS:</strong> ' + r.ubicacion + '</p>' : ''}
-                    </div>
-                `,
-                icon: 'info',
-                width: 600,
-                confirmButtonText: 'Cerrar'
-            });
-        } else {
-            throw new Error(data.message);
-        }
-    } catch (error) {
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: error.message
-        });
-    }
+    // Redirigir a la página de ver detalle
+    window.location.href = `ver.php?id=${id}`;
 }
 
 // ============================================
@@ -314,8 +317,8 @@ function descargarPDF(id) {
         }
     });
     
-    // Descargar PDF
-    window.location.href = '../../api/pdf.php?id=' + id;
+    // Abrir PDF en nueva pestaña
+    window.open('../../api/pdf.php?id=' + id, '_blank');
     
     // Cerrar el indicador después de 2 segundos
     setTimeout(() => {

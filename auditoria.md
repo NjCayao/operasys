@@ -36,3 +36,8 @@ inclujo los js la palntilla admintle3 esta localmente ya que la aplicacion es pa
 vamos a ir modulo por modulo ok. 
 no hagas suposiciones, siempre pregunta. 
 te entregue el documento para que te guies de lo que queremos hacer pero esta vez vamos a ir corriguiendo para dejar que todo funcione. 
+ha y no te olvides que siempre tenemos que poner este codigo para poder actualizar. 
+<?php 
+$custom_js_file = 'assets/js/editar_usuario.js?v=' . ASSETS_VERSION;
+include '../../layouts/footer.php'; 
+?>

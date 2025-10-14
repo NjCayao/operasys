@@ -1,8 +1,8 @@
 <?php
 /**
- * OperaSys - Crear Reporte Diario
- * Archivo: modules/reportes/crear.php
- * Descripción: Formulario con actividades dinámicas y combustible
+ * OperaSys - Editar Reporte
+ * Archivo: modules/reportes/editar.php
+ * Descripción: Editar reporte en borrador (operador) o cualquiera (admin)
  */
 
 require_once '../../config/config.php';
@@ -10,8 +10,54 @@ require_once '../../config/database.php';
 
 verificarSesion();
 
+// Obtener ID del reporte
+$reporteId = $_GET['id'] ?? 0;
+
+if (!$reporteId) {
+    header('Location: listar.php');
+    exit;
+}
+
+// Obtener datos del reporte
+try {
+    $stmt = $pdo->prepare("
+        SELECT 
+            r.*,
+            u.nombre_completo as operador,
+            e.codigo as equipo_codigo,
+            e.categoria as equipo_categoria,
+            e.id as equipo_id
+        FROM reportes r
+        INNER JOIN usuarios u ON r.usuario_id = u.id
+        INNER JOIN equipos e ON r.equipo_id = e.id
+        WHERE r.id = ?
+    ");
+    $stmt->execute([$reporteId]);
+    $reporte = $stmt->fetch();
+    
+    if (!$reporte) {
+        header('Location: listar.php?error=reporte_no_encontrado');
+        exit;
+    }
+    
+    // Verificar permisos
+    if ($reporte['usuario_id'] != $_SESSION['user_id'] && $_SESSION['rol'] !== 'admin') {
+        header('Location: listar.php?error=sin_permisos');
+        exit;
+    }
+    
+    // Solo admin puede editar reportes finalizados
+    if ($reporte['estado'] === 'finalizado' && $_SESSION['rol'] !== 'admin') {
+        header('Location: ver.php?id=' . $reporteId);
+        exit;
+    }
+    
+} catch (PDOException $e) {
+    die('Error: ' . $e->getMessage());
+}
+
 // Variables para el layout
-$page_title = 'Nuevo Reporte Diario';
+$page_title = 'Editar Reporte #' . $reporteId;
 $page_depth = 2;
 $use_sweetalert = true;
 $custom_js_file = 'assets/js/reportes.js?v=' . ASSETS_VERSION;
@@ -29,13 +75,13 @@ include '../../layouts/sidebar.php';
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0">
-                        <i class="fas fa-plus-circle"></i> Nuevo Reporte Diario
+                        <i class="fas fa-edit"></i> Editar Reporte #<?php echo $reporte['id']; ?>
                     </h1>
                 </div>
                 <div class="col-sm-6">
                     <ol class="breadcrumb float-sm-right">
                         <li class="breadcrumb-item"><a href="listar.php">Reportes</a></li>
-                        <li class="breadcrumb-item active">Crear</li>
+                        <li class="breadcrumb-item active">Editar</li>
                     </ol>
                 </div>
             </div>
@@ -46,153 +92,112 @@ include '../../layouts/sidebar.php';
     <section class="content">
         <div class="container-fluid">
             
-            <!-- PASO 1: Seleccionar Equipo -->
-            <div id="paso1" class="row">
-                <div class="col-md-8 offset-md-2">
-                    <div class="card card-primary">
-                        <div class="card-header">
-                            <h3 class="card-title">
-                                <i class="fas fa-truck-monster"></i> Paso 1: Seleccionar Equipo
-                            </h3>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted">
-                                Seleccione el equipo con el que trabajará hoy. 
-                                <strong>La fecha se registrará automáticamente como hoy (<?php echo date('d/m/Y'); ?>)</strong>
-                            </p>
-                            
-                            <div class="form-group">
-                                <label for="equipo_id">
-                                    <i class="fas fa-truck-monster"></i> Equipo <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-control form-control-lg" id="equipo_id" required>
-                                    <option value="">Seleccionar equipo</option>
-                                    <?php
-                                    // Obtener equipos activos
-                                    $stmt = $pdo->query("
-                                        SELECT id, categoria, codigo, descripcion 
-                                        FROM equipos 
-                                        WHERE estado = 1 
-                                        ORDER BY categoria, codigo
-                                    ");
-                                    $equipos = $stmt->fetchAll();
-                                    
-                                    $categoriaActual = '';
-                                    foreach ($equipos as $equipo) {
-                                        if ($categoriaActual !== $equipo['categoria']) {
-                                            if ($categoriaActual !== '') echo '</optgroup>';
-                                            echo '<optgroup label="' . htmlspecialchars($equipo['categoria']) . '">';
-                                            $categoriaActual = $equipo['categoria'];
-                                        }
-                                        echo '<option value="' . $equipo['id'] . '">' 
-                                            . htmlspecialchars($equipo['codigo']) . ' - ' 
-                                            . htmlspecialchars($equipo['descripcion'] ?? 'Sin descripción') 
-                                            . '</option>';
-                                    }
-                                    if ($categoriaActual !== '') echo '</optgroup>';
-                                    ?>
-                                </select>
-                            </div>
-                            
-                            <div id="alertPaso1" class="alert" style="display: none;"></div>
-                            
-                            <button type="button" id="btnIniciarReporte" class="btn btn-primary btn-lg btn-block">
-                                <i class="fas fa-arrow-right"></i> Iniciar Reporte
-                            </button>
-                        </div>
+            <input type="hidden" id="reporte_id" value="<?php echo $reporte['id']; ?>">
+            
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Reporte:</strong> 
+                        Fecha: <strong><?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?></strong> | 
+                        Equipo: <strong><?php echo htmlspecialchars($reporte['equipo_categoria'] . ' - ' . $reporte['equipo_codigo']); ?></strong> |
+                        Estado: 
+                        <?php if ($reporte['estado'] === 'finalizado'): ?>
+                            <span class="badge badge-success">Finalizado</span>
+                            <?php if ($_SESSION['rol'] === 'admin'): ?>
+                                <small class="text-muted">(Solo admin puede editar)</small>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span class="badge badge-warning">Borrador</span>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
 
-            <!-- PASO 2: Reporte con Actividades (Oculto inicialmente) -->
-            <div id="paso2" style="display: none;">
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i>
-                            <strong>Reporte iniciado:</strong> 
-                            Fecha: <strong><?php echo date('d/m/Y'); ?></strong> | 
-                            Equipo: <strong id="equipoSeleccionado"></strong>
+            <div class="row">
+                <div class="col-12">
+                    
+                    <!-- Botones de Acción -->
+                    <div class="mb-3">
+                        <button type="button" id="btnAgregarActividad" class="btn btn-success">
+                            <i class="fas fa-plus"></i> Agregar Actividad
+                        </button>
+                        <button type="button" id="btnAgregarCombustible" class="btn btn-info">
+                            <i class="fas fa-gas-pump"></i> Registrar Combustible
+                        </button>
+                        <a href="listar.php" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Volver
+                        </a>
+                    </div>
+
+                    <!-- Card de Actividades -->
+                    <div class="card card-primary">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-tasks"></i> Actividades del Día
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="listaActividades">
+                                <div class="text-center">
+                                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                    <p class="text-muted">Cargando actividades...</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="row">
-                    <div class="col-12">
-                        
-                        <!-- Botones de Acción -->
-                        <div class="mb-3">
-                            <button type="button" id="btnAgregarActividad" class="btn btn-success">
-                                <i class="fas fa-plus"></i> Agregar Actividad
-                            </button>
-                            <button type="button" id="btnAgregarCombustible" class="btn btn-info">
-                                <i class="fas fa-gas-pump"></i> Registrar Combustible
-                            </button>
+                    <!-- Card de Combustible -->
+                    <div class="card card-info">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-gas-pump"></i> Abastecimientos de Combustible
+                            </h3>
                         </div>
-
-                        <!-- Card de Actividades -->
-                        <div class="card card-primary">
-                            <div class="card-header">
-                                <h3 class="card-title">
-                                    <i class="fas fa-tasks"></i> Actividades del Día
-                                </h3>
-                            </div>
-                            <div class="card-body">
-                                <div id="listaActividades">
-                                    <p class="text-muted text-center">
-                                        <i class="fas fa-info-circle"></i> 
-                                        No hay actividades registradas. Click en "Agregar Actividad" para comenzar.
-                                    </p>
+                        <div class="card-body">
+                            <div id="listaCombustible">
+                                <div class="text-center">
+                                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                    <p class="text-muted">Cargando abastecimientos...</p>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Card de Combustible -->
-                        <div class="card card-info">
-                            <div class="card-header">
-                                <h3 class="card-title">
-                                    <i class="fas fa-gas-pump"></i> Abastecimientos de Combustible
-                                </h3>
-                            </div>
-                            <div class="card-body">
-                                <div id="listaCombustible">
-                                    <p class="text-muted text-center">
-                                        <i class="fas fa-info-circle"></i> 
-                                        No hay abastecimientos registrados.
-                                    </p>
-                                </div>
-                            </div>
+                    <!-- Observaciones Generales -->
+                    <div class="card card-secondary">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-comment"></i> Observaciones Generales
+                            </h3>
                         </div>
-
-                        <!-- Observaciones Generales -->
-                        <div class="card card-secondary">
-                            <div class="card-header">
-                                <h3 class="card-title">
-                                    <i class="fas fa-comment"></i> Observaciones Generales
-                                </h3>
-                            </div>
-                            <div class="card-body">
-                                <textarea class="form-control" 
-                                          id="observaciones_generales" 
-                                          rows="4"
-                                          placeholder="Observaciones generales del día de trabajo (opcional)"></textarea>
-                            </div>
+                        <div class="card-body">
+                            <textarea class="form-control" 
+                                      id="observaciones_generales" 
+                                      rows="4"
+                                      placeholder="Observaciones generales del día de trabajo (opcional)"><?php echo htmlspecialchars($reporte['observaciones_generales'] ?? ''); ?></textarea>
                         </div>
+                    </div>
 
-                        <!-- Botones Finales -->
-                        <div class="mb-3">
-                            <button type="button" id="btnGuardarBorrador" class="btn btn-warning btn-lg">
-                                <i class="fas fa-save"></i> Guardar Borrador
+                    <!-- Botones Finales -->
+                    <div class="mb-3">
+                        <?php if ($reporte['estado'] === 'borrador'): ?>
+                            <button type="button" id="btnGuardarCambios" class="btn btn-warning btn-lg">
+                                <i class="fas fa-save"></i> Guardar Cambios
                             </button>
                             <button type="button" id="btnFinalizarReporte" class="btn btn-success btn-lg">
                                 <i class="fas fa-check"></i> Finalizar y Enviar
                             </button>
-                            <a href="listar.php" class="btn btn-secondary btn-lg">
-                                <i class="fas fa-times"></i> Cancelar
-                            </a>
-                        </div>
-
+                        <?php else: ?>
+                            <button type="button" id="btnGuardarCambios" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i> Guardar Cambios (Admin)
+                            </button>
+                        <?php endif; ?>
+                        <a href="listar.php" class="btn btn-secondary btn-lg">
+                            <i class="fas fa-times"></i> Cancelar
+                        </a>
                     </div>
+
                 </div>
             </div>
 
@@ -200,19 +205,20 @@ include '../../layouts/sidebar.php';
     </section>
 </div>
 
-<!-- Modal: Agregar Actividad -->
+<!-- Modal: Agregar/Editar Actividad -->
 <div class="modal fade" id="modalActividad" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success">
                 <h5 class="modal-title">
-                    <i class="fas fa-plus"></i> Agregar Actividad
+                    <i class="fas fa-plus"></i> <span id="tituloModalActividad">Agregar Actividad</span>
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
                 </button>
             </div>
             <form id="formActividad">
+                <input type="hidden" id="actividad_id">
                 <div class="modal-body">
                     
                     <div class="row">
@@ -285,7 +291,7 @@ include '../../layouts/sidebar.php';
                         <i class="fas fa-times"></i> Cancelar
                     </button>
                     <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save"></i> Guardar Actividad
+                        <i class="fas fa-save"></i> Guardar
                     </button>
                 </div>
             </form>
