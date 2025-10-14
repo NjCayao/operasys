@@ -160,7 +160,7 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                                 <p>Auditoría</p>
                             </a>
                         </li>
-                        
+
                         <!-- Configuración Empresa (Solo Admin) -->
                         <li class="nav-item">
                             <a href="<?php echo $base_path; ?>modules/admin/configuracion_empresa.php"
@@ -172,10 +172,16 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                     <?php endif; ?>
 
                 <?php endif; ?>
-
             </ul>
         </nav>
         <!-- /.sidebar-menu -->
     </div>
     <!-- /.sidebar -->
+
+    <!-- Botón PWA en Sidebar -->
+    <div class="mt-3 px-3" id="sidebarInstallPWA" style="display: none;">
+        <button id="btnInstallPWA" class="btn btn-info btn-sm btn-block">
+            <i class="fas fa-download"></i> Instalar App
+        </button>
+    </div>
 </aside>

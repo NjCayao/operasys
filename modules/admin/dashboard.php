@@ -1,4 +1,5 @@
 <?php
+
 /**
  * OperaSys - Dashboard Principal
  * Archivo: modules/admin/dashboard.php

@@ -225,4 +225,34 @@ Error DataTable equipos (reinitialize)
 Error DataTable reportes (columnas por rol)
 Botones de acción visibles para admin/supervisor
 
+Módulo 7: Exportación PDF
+
+✅ Migración de HTML+print a FPDF real
+✅ Encabezado fijo: "OperaSys - Reporte Diario de Operaciones" (hardcodeado)
+✅ Logo de empresa en esquina superior derecha
+✅ Tabla SQL configuracion_empresa creada
+✅ Módulo admin configuracion_empresa.php para gestionar datos de empresa
+✅ PDFs con secciones: Info reporte, Actividades, Combustible, Observaciones, Firma
+✅ Diseño profesional A4, 100% offline
+
+Módulo 8: PWA
+
+✅ manifest.json configurado con ID y rutas absolutas
+✅ Service Worker corregido (error POST cache solucionado)
+✅ Iconos PWA en rutas correctas (/assets/images/icons/)
+✅ Meta tags PWA agregados en header.php
+✅ Botón de instalación en sidebar
+✅ Script pwa-install.js implementado
+✅ App instalable y funcional ✅
+✅ IndexedDB para modo offline
+✅ Sincronización automática de reportes pendientes
+
+Correcciones técnicas:
+
+🔧 .htaccess corregido (permitir acceso interno a config.php)
+🔧 Rutas absolutas para recursos PWA (evitar problemas con $base_path)
+🔧 FPDF instalado correctamente (vendor/fpdf/)
+🔧 Logo empresa en base64 (BD, no archivos físicos)
+🔧 Sidebar actualizado con enlace "Config. Empresa"
+
 # 

@@ -55,5 +55,7 @@
 <script src="<?php echo $base_path . $custom_js_file; ?>"></script>
 <?php endif; ?>
 
+<script src="<?php echo $base_path; ?>assets/js/pwa-install.js"></script>
+
 </body>
 </html>
