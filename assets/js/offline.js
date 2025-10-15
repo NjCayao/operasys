@@ -47,7 +47,7 @@ window.addEventListener('offline', function() {
 // ============================================
 // VERIFICAR REPORTES PENDIENTES AL CARGAR
 // ============================================
-window.addEventListener('load', async function() {
+window.addEventListener('indexeddb-ready', async function() {
     try {
         const pendientes = await window.IndexedDBManager.contarReportesPendientes();
         

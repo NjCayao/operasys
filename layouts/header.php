@@ -47,20 +47,25 @@ $base_path = str_repeat('../', $depth);
     <script src="/operasys/assets/js/indexeddb.js?v=<?php echo ASSETS_VERSION; ?>"></script>
     <script>
         // Inicializar IndexedDB cuando carga la página
-        document.addEventListener('DOMContentLoaded', async function() {
+        (async function() {
             try {
+                // Inicializar ANTES de cargar otros scripts
                 await window.IndexedDBManager.inicializar();
                 console.log('[App] IndexedDB inicializado');
-                
+
                 // Si hay internet, sincronizar catálogos
                 if (navigator.onLine) {
                     await window.IndexedDBManager.sincronizarCatalogos();
                     console.log('[App] Catálogos sincronizados');
                 }
+
+                // Disparar evento para que otros scripts sepan que IndexedDB está listo
+                window.dispatchEvent(new Event('indexeddb-ready'));
+
             } catch (error) {
                 console.error('[App] Error al inicializar IndexedDB:', error);
             }
-        });
+        })();
     </script>
 
     <!-- AdminLTE CSS LOCAL -->
