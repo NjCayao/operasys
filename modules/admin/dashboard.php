@@ -11,6 +11,11 @@ require_once '../../config/database.php';
 
 verificarSesion();
 
+require_once '../../includes/auth_check.php';
+
+// Solo admin y supervisor pueden ver el dashboard
+verificarPermiso(['admin', 'supervisor']);
+
 // Configuración de la página
 $page_title = 'Dashboard';
 $page_depth = 2;

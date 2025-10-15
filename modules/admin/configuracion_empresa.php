@@ -365,5 +365,6 @@ include '../../layouts/sidebar.php';
 </script>
 
 <?php
+$custom_js_file = 'assets/js/pwa-install.js?v=' . ASSETS_VERSION;
 include '../../layouts/footer.php';
 ?>

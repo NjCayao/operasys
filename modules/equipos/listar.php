@@ -11,6 +11,11 @@ require_once '../../config/database.php';
 // Verificar sesión
 verificarSesion();
 
+require_once '../../includes/auth_check.php';
+
+// Solo admin y supervisor pueden ver equipos
+verificarPermiso(['admin', 'supervisor']);
+
 // Variables para el layout
 $page_title = 'Gestión de Equipos';
 $page_depth = 2;

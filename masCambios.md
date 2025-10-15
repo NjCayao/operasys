@@ -1,0 +1,1 @@
+agregar el boton lapis en el mismo modal mas ver mientras no se halla enviado el reporte

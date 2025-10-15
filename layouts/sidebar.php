@@ -11,6 +11,8 @@ $rolUsuario = $_SESSION['rol'] ?? 'operador';
 
 // Determinar qué página está activa
 $current_page = basename($_SERVER['PHP_SELF'], '.php');
+
+$es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
 ?>
 
 <!-- Main Sidebar Container -->
@@ -38,25 +40,27 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
         <nav class="mt-2">
             <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
 
-                <!-- Dashboard -->
+                <?php if ($rolUsuario === 'admin' || $rolUsuario === 'supervisor'): ?>
+                    <!-- Dashboard (Solo Admin y Supervisor) -->
+                    <li class="nav-item">
+                        <a href="<?php echo $base_path; ?>modules/admin/dashboard.php"
+                            class="nav-link <?php echo $current_page == 'dashboard' ? 'active' : ''; ?>">
+                            <i class="nav-icon fas fa-tachometer-alt"></i>
+                            <p>Dashboard</p>
+                        </a>
+                    </li>
+                <?php endif; ?>
+
+                <!-- Nuevo Reporte (Todos los roles) -->
                 <li class="nav-item">
-                    <a href="<?php echo $base_path; ?>modules/admin/dashboard.php"
-                        class="nav-link <?php echo $current_page == 'dashboard' ? 'active' : ''; ?>">
-                        <i class="nav-icon fas fa-tachometer-alt"></i>
-                        <p>Dashboard</p>
+                    <a href="<?php echo $base_path; ?>modules/reportes/crear.php"
+                        class="nav-link <?php echo $current_page == 'crear' ? 'active' : ''; ?>">
+                        <i class="nav-icon fas fa-plus-circle"></i>
+                        <p>Nuevo Reporte</p>
                     </a>
                 </li>
 
-                <!-- Equipos -->
-                <li class="nav-item">
-                    <a href="<?php echo $base_path; ?>modules/equipos/listar.php"
-                        class="nav-link <?php echo $current_page == 'listar' && strpos($_SERVER['PHP_SELF'], 'equipos') !== false ? 'active' : ''; ?>">
-                        <i class="nav-icon fas fa-truck-monster"></i>
-                        <p>Equipos</p>
-                    </a>
-                </li>
-
-                <!-- Mis Reportes -->
+                <!-- Mis Reportes (Todos los roles) -->
                 <li class="nav-item">
                     <a href="<?php echo $base_path; ?>modules/reportes/listar.php"
                         class="nav-link <?php echo $current_page == 'listar' && strpos($_SERVER['PHP_SELF'], 'reportes') !== false ? 'active' : ''; ?>">
@@ -65,14 +69,16 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                     </a>
                 </li>
 
-                <!-- Nuevo Reporte -->
-                <li class="nav-item">
-                    <a href="<?php echo $base_path; ?>modules/reportes/crear.php"
-                        class="nav-link <?php echo $current_page == 'crear' ? 'active' : ''; ?>">
-                        <i class="nav-icon fas fa-plus-circle"></i>
-                        <p>Nuevo Reporte</p>
-                    </a>
-                </li>
+                <?php if ($rolUsuario === 'admin' || $rolUsuario === 'supervisor'): ?>
+                    <!-- Equipos (Solo Admin y Supervisor) -->
+                    <li class="nav-item">
+                        <a href="<?php echo $base_path; ?>modules/equipos/listar.php"
+                            class="nav-link <?php echo $current_page == 'listar' && strpos($_SERVER['PHP_SELF'], 'equipos') !== false ? 'active' : ''; ?>">
+                            <i class="nav-icon fas fa-truck-monster"></i>
+                            <p>Equipos</p>
+                        </a>
+                    </li>
+                <?php endif; ?>
 
                 <?php if ($rolUsuario === 'admin' || $rolUsuario === 'supervisor'): ?>
                     <!-- Sección Administración -->
@@ -110,37 +116,36 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                                         <p>Administradores</p>
                                     </a>
                                 </li>
-
-                            </ul>
-                        </li>
-
-                        <!-- Catálogos (Solo Admin) -->
-                        <li class="nav-item has-treeview">
-                            <a href="#" class="nav-link">
-                                <i class="nav-icon fas fa-cogs"></i>
-                                <p>
-                                    Catálogos
-                                    <i class="fas fa-angle-left right"></i>
-                                </p>
-                            </a>
-                            <ul class="nav nav-treeview">
-                                <li class="nav-item">
-                                    <a href="<?php echo $base_path; ?>modules/admin/tipos_trabajo.php"
-                                        class="nav-link <?php echo $current_page == 'tipos_trabajo' ? 'active' : ''; ?>">
-                                        <i class="fas fa-tasks nav-icon"></i>
-                                        <p>Tipos de Trabajo</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="<?php echo $base_path; ?>modules/admin/fases_costo.php"
-                                        class="nav-link <?php echo $current_page == 'fases_costo' ? 'active' : ''; ?>">
-                                        <i class="fas fa-tag nav-icon"></i>
-                                        <p>Fases de Costo</p>
-                                    </a>
-                                </li>
                             </ul>
                         </li>
                     <?php endif; ?>
+
+                    <!-- Catálogos (Admin y Supervisor) -->
+                    <li class="nav-item has-treeview">
+                        <a href="#" class="nav-link">
+                            <i class="nav-icon fas fa-cogs"></i>
+                            <p>
+                                Catálogos
+                                <i class="fas fa-angle-left right"></i>
+                            </p>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item">
+                                <a href="<?php echo $base_path; ?>modules/admin/tipos_trabajo.php"
+                                    class="nav-link <?php echo $current_page == 'tipos_trabajo' ? 'active' : ''; ?>">
+                                    <i class="fas fa-tasks nav-icon"></i>
+                                    <p>Tipos de Trabajo</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="<?php echo $base_path; ?>modules/admin/fases_costo.php"
+                                    class="nav-link <?php echo $current_page == 'fases_costo' ? 'active' : ''; ?>">
+                                    <i class="fas fa-tag nav-icon"></i>
+                                    <p>Fases de Costo</p>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
 
                     <!-- Reportes Globales (Admin y Supervisor) -->
                     <li class="nav-item">

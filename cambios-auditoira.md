@@ -255,4 +255,159 @@ Correcciones técnicas:
 🔧 Logo empresa en base64 (BD, no archivos físicos)
 🔧 Sidebar actualizado con enlace "Config. Empresa"
 
-# 
+# 📋 CHANGELOG - Sistema de Permisos por Rol
+✅ Archivos Creados:
+
+includes/auth_check.php - Sistema centralizado de control de acceso con funciones de permisos
+
+✅ Archivos Modificados:
+1. layouts/sidebar.php
+
+Dashboard: Solo admin y supervisor
+Nuevo Reporte: Todos los roles
+Mis Reportes: Todos los roles
+Equipos: Solo admin y supervisor
+Catálogos: Admin y supervisor (supervisor solo lectura)
+Usuarios: Solo admin
+Auditoría: Solo admin
+Config. Empresa: Solo admin
+
+2. api/auth.php
+
+Redirección según rol después del login:
+
+Admin/Supervisor → dashboard
+Operador → mis reportes
+
+
+
+3. modules/admin/dashboard.php
+
+Agregado: verificarPermiso(['admin', 'supervisor'])
+
+4. modules/equipos/listar.php
+
+Agregado: verificarPermiso(['admin', 'supervisor'])
+
+5. modules/admin/tipos_trabajo.php
+
+Agregado: verificarPermiso(['admin', 'supervisor'])
+Botón "Nuevo": Solo visible para admin
+
+6. modules/admin/fases_costo.php
+
+Agregado: verificarPermiso(['admin', 'supervisor'])
+Botón "Nueva Fase": Solo visible para admin
+
+🔒 Seguridad:
+
+Bloqueo de acceso directo por URL según rol
+Validación de permisos en cada módulo
+Redirección automática a página permitida si intenta acceso no autorizado
+
+📊 Permisos por Rol:
+Operador: Crear reportes, ver sus reportes, perfil
+Supervisor: Todo lo del operador + dashboard, equipos (ver), catálogos (ver), reportes globales
+Admin: Acceso total + gestionar usuarios, editar catálogos, auditoría, configuración
+
+# 📋 CHANGELOG - OperaSys
+🎯 Funcionalidades Principales Implementadas
+
+✅ 1. Sistema de Permisos por Roles
+
+Admin: Acceso total (CRUD completo)
+Supervisor: Solo lectura (ver y exportar)
+Operador: Crear y editar sus propios reportes
+Sidebar dinámico según rol
+
+
+✅ 2. Módulo de Reportes Globales
+
+Vista consolidada de todos los reportes
+Filtros dinámicos:
+
+Por operador
+Por categoría de equipo
+Por fase de costo
+Por rango de fechas
+
+
+Columnas mostradas:
+
+Fases de costo usadas
+Total de actividades
+Horas trabajadas
+Combustible consumido
+
+
+Exportación:
+
+Excel (.xlsx) con SimpleXLSXGen
+PDF con resumen
+
+
+Permisos:
+
+Eliminar solo reportes sin actividades
+Bloqueo automático si tiene datos
+
+
+
+
+✅ 3. Sistema Offline Completo (PWA)
+
+IndexedDB implementado:
+
+Almacena catálogos localmente (operadores, equipos, fases, tipos)
+Guarda reportes cuando no hay internet
+Sincronización automática al recuperar conexión
+
+
+Service Worker:
+
+Cachea archivos estáticos
+Funciona offline después de primera carga
+
+
+Sincronización bidireccional:
+
+Descarga datos del servidor
+Sube reportes pendientes automáticamente
+
+
+
+
+✅ 4. Carga Dinámica de Catálogos
+
+❌ Eliminados datos hardcodeados
+✅ Todo se carga desde la base de datos:
+
+Categorías de equipos
+Fases de costo
+Tipos de trabajo
+Operadores
+
+
+
+
+✅ 5. Exportaciones Mejoradas
+
+Excel: Librería SimpleXLSXGen (sin Composer)
+PDF: FPDF con formato profesional
+Filtros aplicados en exportaciones
+
+
+🔧 Correcciones Técnicas
+
+APIs separadas (reportes_global.php)
+Consultas SQL optimizadas con JOINs
+Manejo de errores mejorado
+Validaciones de permisos en backend
+
+
+📦 Archivos Clave Creados
+api/reportes_global.php          → API reportes globales
+assets/js/reportes_global.js     → Lógica frontend reportes
+assets/js/indexeddb.js           → Sistema IndexedDB
+assets/js/offline.js             → Gestión offline integrada
+vendor/SimpleXLSXGen.php         → Librería Excel

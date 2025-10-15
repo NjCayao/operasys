@@ -43,6 +43,25 @@ $base_path = str_repeat('../', $depth);
             });
         }
     </script>
+    <script src="/operasys/assets/js/sw-update.js?v=<?php echo ASSETS_VERSION; ?>"></script>
+    <script src="/operasys/assets/js/indexeddb.js?v=<?php echo ASSETS_VERSION; ?>"></script>
+    <script>
+        // Inicializar IndexedDB cuando carga la página
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                await window.IndexedDBManager.inicializar();
+                console.log('[App] IndexedDB inicializado');
+                
+                // Si hay internet, sincronizar catálogos
+                if (navigator.onLine) {
+                    await window.IndexedDBManager.sincronizarCatalogos();
+                    console.log('[App] Catálogos sincronizados');
+                }
+            } catch (error) {
+                console.error('[App] Error al inicializar IndexedDB:', error);
+            }
+        });
+    </script>
 
     <!-- AdminLTE CSS LOCAL -->
     <link rel="stylesheet" href="<?php echo $base_path; ?>vendor/adminlte/dist/css/adminlte.min.css">
@@ -68,6 +87,7 @@ $base_path = str_repeat('../', $depth);
         <?php echo $extra_css; ?>
     <?php endif; ?>
 </head>
+
 
 <body class="hold-transition sidebar-mini layout-fixed">
     <div class="wrapper">

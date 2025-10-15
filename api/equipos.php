@@ -366,6 +366,31 @@ elseif ($action === 'obtener') {
 }
 
 // ============================================
+// OBTENER CATEGORÍAS ÚNICAS (Para filtros)
+// ============================================
+elseif ($action === 'obtener_categorias') {
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT DISTINCT categoria 
+            FROM equipos 
+            WHERE estado = 1 
+            ORDER BY categoria ASC
+        ");
+        
+        $categorias = $stmt->fetchAll();
+        
+        echo json_encode([
+            'success' => true,
+            'data' => $categorias
+        ]);
+        
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Error al obtener categorías']);
+    }
+}
+
+// ============================================
 // ACCIÓN NO VÁLIDA
 // ============================================
 else {

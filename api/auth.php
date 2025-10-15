@@ -79,7 +79,24 @@ try {
 
     // Verificar si tiene firma
     $tieneFirma = !empty($user['firma']);
-    $redirect = $tieneFirma ? '../admin/dashboard.php' : '../usuarios/firma.php';
+
+    // Redirección según rol
+    if (!$tieneFirma) {
+        $redirect = '../usuarios/firma.php';
+    } else {
+        // Redirigir a página de inicio según rol
+        switch ($user['rol']) {
+            case 'admin':
+            case 'supervisor':
+                $redirect = '../admin/dashboard.php';
+                break;
+            case 'operador':
+                $redirect = '../reportes/listar.php';
+                break;
+            default:
+                $redirect = '../reportes/listar.php';
+        }
+    }
 
     // Respuesta exitosa
     echo json_encode([
@@ -92,7 +109,6 @@ try {
             'rol' => $user['rol']
         ]
     ]);
-    
 } catch (PDOException $e) {
     echo json_encode([
         'success' => false,

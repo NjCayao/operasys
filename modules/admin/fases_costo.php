@@ -1,4 +1,5 @@
 <?php
+
 /**
  * OperaSys - Gestión de Fases de Costo
  * Archivo: modules/admin/fases_costo.php
@@ -9,7 +10,10 @@ require_once '../../config/config.php';
 require_once '../../config/database.php';
 
 // Verificar sesión y rol admin
-verificarAdmin();
+require_once '../../includes/auth_check.php';
+
+// Verificar sesión - permitir admin y supervisor
+verificarPermiso(['admin', 'supervisor']);
 
 // Variables para el layout
 $page_title = 'Fases de Costo';
@@ -21,6 +25,10 @@ $custom_js_file = 'assets/js/fases_costo.js?v=' . ASSETS_VERSION;
 include '../../layouts/header.php';
 include '../../layouts/navbar.php';
 include '../../layouts/sidebar.php';
+?>
+<?php
+// Variable para ocultar acciones en JavaScript
+$es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
 ?>
 
 <!-- Content Wrapper -->
@@ -46,15 +54,17 @@ include '../../layouts/sidebar.php';
     <!-- Main content -->
     <section class="content">
         <div class="container-fluid">
-            
+
             <!-- Botón Agregar -->
-            <div class="row mb-3">
-                <div class="col-12">
-                    <button type="button" class="btn btn-primary" id="btnNuevaFase">
-                        <i class="fas fa-plus"></i> Nueva Fase de Costo
-                    </button>
+            <?php if ($_SESSION['rol'] === 'admin'): ?>
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <button type="button" class="btn btn-primary" id="btnNuevaFase">
+                            <i class="fas fa-plus"></i> Nueva Fase de Costo
+                        </button>
+                    </div>
                 </div>
-            </div>
+            <?php endif; ?>
 
             <!-- Tarjeta con tabla -->
             <div class="card">
@@ -64,7 +74,9 @@ include '../../layouts/sidebar.php';
                     </h3>
                 </div>
                 <div class="card-body">
-                    <table id="tablaFases" class="table table-bordered table-striped table-hover">
+                    <table id="tablaFases"
+                        class="table table-bordered table-striped table-hover"
+                        data-rol="<?php echo $_SESSION['rol']; ?>">
                         <thead>
                             <tr>
                                 <th width="8%">ID</th>
@@ -102,19 +114,19 @@ include '../../layouts/sidebar.php';
             <form id="formFase">
                 <input type="hidden" id="fase_id">
                 <div class="modal-body">
-                    
+
                     <div class="form-group">
                         <label for="codigo">
                             <i class="fas fa-barcode"></i> Código <span class="text-danger">*</span>
                         </label>
-                        <input type="text" 
-                               class="form-control text-uppercase" 
-                               id="codigo" 
-                               name="codigo"
-                               placeholder="Ej: FC001"
-                               required
-                               maxlength="20"
-                               style="text-transform: uppercase;">
+                        <input type="text"
+                            class="form-control text-uppercase"
+                            id="codigo"
+                            name="codigo"
+                            placeholder="Ej: FC001"
+                            required
+                            maxlength="20"
+                            style="text-transform: uppercase;">
                         <small class="form-text text-muted">
                             Código único de la fase (se convertirá a mayúsculas)
                         </small>
@@ -124,25 +136,25 @@ include '../../layouts/sidebar.php';
                         <label for="descripcion">
                             <i class="fas fa-align-left"></i> Descripción <span class="text-danger">*</span>
                         </label>
-                        <textarea class="form-control" 
-                                  id="descripcion" 
-                                  name="descripcion"
-                                  rows="3"
-                                  placeholder="Descripción de la fase de costo"
-                                  required
-                                  maxlength="255"></textarea>
+                        <textarea class="form-control"
+                            id="descripcion"
+                            name="descripcion"
+                            rows="3"
+                            placeholder="Descripción de la fase de costo"
+                            required
+                            maxlength="255"></textarea>
                     </div>
 
                     <div class="form-group">
                         <label for="proyecto">
                             <i class="fas fa-folder"></i> Proyecto (Opcional)
                         </label>
-                        <input type="text" 
-                               class="form-control" 
-                               id="proyecto" 
-                               name="proyecto"
-                               placeholder="Ej: Proyecto Minero XYZ"
-                               maxlength="100">
+                        <input type="text"
+                            class="form-control"
+                            id="proyecto"
+                            name="proyecto"
+                            placeholder="Ej: Proyecto Minero XYZ"
+                            maxlength="100">
                         <small class="form-text text-muted">
                             Proyecto asociado a esta fase
                         </small>
