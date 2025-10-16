@@ -125,25 +125,25 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                         <a href="#" class="nav-link">
                             <i class="nav-icon fas fa-cogs"></i>
                             <p>
-                                Catálogos
+                                Planillas de Control
                                 <i class="fas fa-angle-left right"></i>
                             </p>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item">
-                                <a href="<?php echo $base_path; ?>modules/admin/tipos_trabajo.php"
-                                    class="nav-link <?php echo $current_page == 'tipos_trabajo' ? 'active' : ''; ?>">
-                                    <i class="fas fa-tasks nav-icon"></i>
-                                    <p>Tipos de Trabajo</p>
+                                <a href="<?php echo $base_path; ?>modules/admin/actividades_ht.php"
+                                    class="nav-link <?php echo $current_page == 'actividades_ht' ? 'active' : ''; ?>">
+                                    <i class="fas fa-tasks nav-icon text-success"></i>
+                                    <p>Horas Trabajadas (HT)</p>
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a href="<?php echo $base_path; ?>modules/admin/fases_costo.php"
-                                    class="nav-link <?php echo $current_page == 'fases_costo' ? 'active' : ''; ?>">
-                                    <i class="fas fa-tag nav-icon"></i>
-                                    <p>Fases de Costo</p>
+                                <a href="<?php echo $base_path; ?>modules/admin/motivos_hp.php"
+                                    class="nav-link <?php echo $current_page == 'motivos_hp' ? 'active' : ''; ?>">
+                                    <i class="fas fa-pause-circle nav-icon text-warning"></i>
+                                    <p>Horas Paradas (HP)</p>
                                 </a>
-                            </li>
+                            </li>                            
                         </ul>
                     </li>
 

@@ -39,7 +39,7 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0">
-                        <i class="fas fa-tasks"></i> Gestión de Tipos de Trabajo
+                        <i class="fas fa-tasks"></i> Horas Trabajadas
                     </h1>
                 </div>
                 <div class="col-sm-6">

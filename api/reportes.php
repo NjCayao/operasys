@@ -1,9 +1,8 @@
 <?php
-
 /**
- * OperaSys - API de Reportes
+ * OperaSys - API de Reportes V3.0
  * Archivo: api/reportes.php
- * Descripción: CRUD completo de reportes con actividades y combustible
+ * Sistema HT/HP con horómetros y combustible
  */
 
 require_once '../config/database.php';
@@ -11,7 +10,6 @@ require_once '../config/config.php';
 
 header('Content-Type: application/json');
 
-// Verificar sesión
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'message' => 'Sesión no válida']);
     exit;
@@ -22,245 +20,124 @@ $userId = $_SESSION['user_id'];
 $userRol = $_SESSION['rol'];
 
 // ============================================
-// CREAR REPORTE (CABECERA)
+// CREAR REPORTE
 // ============================================
 if ($action === 'crear') {
 
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo json_encode(['success' => false, 'message' => 'Método no permitido']);
-        exit;
-    }
-
     $equipoId = $_POST['equipo_id'] ?? 0;
-    $fecha = $_POST['fecha'] ?? date('Y-m-d'); // Por defecto hoy
+    $fecha = $_POST['fecha'] ?? date('Y-m-d');
+    $horometroInicial = $_POST['horometro_inicial'] ?? 0;
 
-    // Validar equipo
     if (!$equipoId) {
-        echo json_encode(['success' => false, 'message' => 'Debe seleccionar un equipo']);
+        echo json_encode(['success' => false, 'message' => 'Seleccione un equipo']);
         exit;
     }
 
-    // Validar que el equipo exista y esté activo
     try {
+        // Verificar equipo activo
         $stmt = $pdo->prepare("SELECT id FROM equipos WHERE id = ? AND estado = 1");
         $stmt->execute([$equipoId]);
 
         if (!$stmt->fetch()) {
-            echo json_encode(['success' => false, 'message' => 'Equipo no válido o inactivo']);
+            echo json_encode(['success' => false, 'message' => 'Equipo no válido']);
             exit;
         }
 
-        // Verificar que no exista ya un reporte para este equipo en esta fecha
-        $stmt = $pdo->prepare("
-            SELECT id FROM reportes 
-            WHERE usuario_id = ? AND equipo_id = ? AND fecha = ?
-        ");
+        // Verificar duplicado
+        $stmt = $pdo->prepare("SELECT id FROM reportes WHERE usuario_id = ? AND equipo_id = ? AND fecha = ?");
         $stmt->execute([$userId, $equipoId, $fecha]);
 
         if ($stmt->fetch()) {
-            echo json_encode(['success' => false, 'message' => 'Ya existe un reporte para este equipo en esta fecha']);
+            echo json_encode(['success' => false, 'message' => 'Ya existe un reporte para este equipo hoy']);
             exit;
         }
 
         // Crear reporte
         $stmt = $pdo->prepare("
-            INSERT INTO reportes (usuario_id, equipo_id, fecha, estado) 
-            VALUES (?, ?, ?, 'borrador')
+            INSERT INTO reportes (usuario_id, equipo_id, fecha, horometro_inicial, estado) 
+            VALUES (?, ?, ?, ?, 'borrador')
         ");
 
-        if ($stmt->execute([$userId, $equipoId, $fecha])) {
+        if ($stmt->execute([$userId, $equipoId, $fecha, $horometroInicial])) {
             $reporteId = $pdo->lastInsertId();
 
-            // Registrar en auditoría
-            $stmtAudit = $pdo->prepare("
-                INSERT INTO auditoria (usuario_id, accion, detalle) 
-                VALUES (?, 'crear_reporte', ?)
-            ");
-            $stmtAudit->execute([$userId, "Reporte ID: $reporteId creado"]);
+            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+            $stmtAudit->execute([$userId, 'crear_reporte', "Reporte ID: $reporteId"]);
 
-            echo json_encode([
-                'success' => true,
-                'message' => 'Reporte creado correctamente',
-                'reporte_id' => $reporteId
-            ]);
+            echo json_encode(['success' => true, 'message' => 'Reporte creado', 'reporte_id' => $reporteId]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al crear reporte']);
+            echo json_encode(['success' => false, 'message' => 'Error al crear']);
         }
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
 }
 
 // ============================================
-// AGREGAR ACTIVIDAD AL REPORTE
+// ACTUALIZAR HORÓMETRO FINAL
 // ============================================
-elseif ($action === 'agregar_actividad') {
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo json_encode(['success' => false, 'message' => 'Método no permitido']);
-        exit;
-    }
-
+elseif ($action === 'actualizar_horometro') {
+    
     $reporteId = $_POST['reporte_id'] ?? 0;
-    $tipoTrabajoId = $_POST['tipo_trabajo_id'] ?? 0;
-    $faseCostoId = $_POST['fase_costo_id'] ?? 0;
-    $horometroInicial = $_POST['horometro_inicial'] ?? 0;
     $horometroFinal = $_POST['horometro_final'] ?? 0;
-    $observaciones = trim($_POST['observaciones'] ?? '');
-
-    // Validaciones
-    if (!$reporteId || !$tipoTrabajoId || !$faseCostoId) {
+    
+    if (!$reporteId || !$horometroFinal) {
         echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
         exit;
     }
-
-    if ($horometroFinal <= $horometroInicial) {
-        echo json_encode(['success' => false, 'message' => 'Horómetro final debe ser mayor al inicial']);
-        exit;
-    }
-
+    
     try {
-        // Verificar que el reporte existe y está en borrador
-        $stmt = $pdo->prepare("
-            SELECT id, usuario_id, estado FROM reportes WHERE id = ?
-        ");
+        $stmt = $pdo->prepare("SELECT horometro_inicial, usuario_id, estado FROM reportes WHERE id = ?");
         $stmt->execute([$reporteId]);
         $reporte = $stmt->fetch();
-
+        
         if (!$reporte) {
             echo json_encode(['success' => false, 'message' => 'Reporte no encontrado']);
             exit;
         }
-
-        // Solo admin puede editar reportes finalizados
-        if ($reporte['estado'] === 'finalizado' && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No puede editar un reporte finalizado']);
+        
+        if ($horometroFinal <= $reporte['horometro_inicial']) {
+            echo json_encode(['success' => false, 'message' => 'Horómetro final debe ser mayor al inicial']);
             exit;
         }
-
-        // Solo el dueño o admin puede agregar actividades
+        
         if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos para editar este reporte']);
+            echo json_encode(['success' => false, 'message' => 'Sin permisos']);
             exit;
         }
-
-        // Obtener el último orden
-        $stmt = $pdo->prepare("
-            SELECT COALESCE(MAX(orden), 0) + 1 as nuevo_orden 
-            FROM reportes_detalle 
-            WHERE reporte_id = ?
-        ");
-        $stmt->execute([$reporteId]);
-        $orden = $stmt->fetch()['nuevo_orden'];
-
-        // Insertar actividad
-        $stmt = $pdo->prepare("
-            INSERT INTO reportes_detalle 
-            (reporte_id, tipo_trabajo_id, fase_costo_id, horometro_inicial, 
-             horometro_final, observaciones, orden) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-
-        if ($stmt->execute([
-            $reporteId,
-            $tipoTrabajoId,
-            $faseCostoId,
-            $horometroInicial,
-            $horometroFinal,
-            $observaciones,
-            $orden
-        ])) {
+        
+        $stmt = $pdo->prepare("UPDATE reportes SET horometro_final = ? WHERE id = ?");
+        
+        if ($stmt->execute([$horometroFinal, $reporteId])) {
+            // Calcular horas motor
+            $horasMotor = $horometroFinal - $reporte['horometro_inicial'];
+            
             echo json_encode([
-                'success' => true,
-                'message' => 'Actividad agregada correctamente',
-                'actividad_id' => $pdo->lastInsertId()
+                'success' => true, 
+                'message' => 'Horómetro actualizado',
+                'horas_motor' => $horasMotor
             ]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al agregar actividad']);
+            echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
         }
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()]);
-    }
-}
-
-// ============================================
-// ELIMINAR ACTIVIDAD
-// ============================================
-elseif ($action === 'eliminar_actividad') {
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo json_encode(['success' => false, 'message' => 'Método no permitido']);
-        exit;
-    }
-
-    $actividadId = $_POST['actividad_id'] ?? 0;
-
-    if (!$actividadId) {
-        echo json_encode(['success' => false, 'message' => 'ID de actividad no válido']);
-        exit;
-    }
-
-    try {
-        // Verificar permisos
-        $stmt = $pdo->prepare("
-            SELECT rd.id, r.usuario_id, r.estado 
-            FROM reportes_detalle rd
-            INNER JOIN reportes r ON rd.reporte_id = r.id
-            WHERE rd.id = ?
-        ");
-        $stmt->execute([$actividadId]);
-        $actividad = $stmt->fetch();
-
-        if (!$actividad) {
-            echo json_encode(['success' => false, 'message' => 'Actividad no encontrada']);
-            exit;
-        }
-
-        // Solo admin puede eliminar de reportes finalizados
-        if ($actividad['estado'] === 'finalizado' && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No puede eliminar de un reporte finalizado']);
-            exit;
-        }
-
-        // Solo el dueño o admin pueden eliminar
-        if ($actividad['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
-            exit;
-        }
-
-        // Eliminar actividad
-        $stmt = $pdo->prepare("DELETE FROM reportes_detalle WHERE id = ?");
-
-        if ($stmt->execute([$actividadId])) {
-            echo json_encode([
-                'success' => true,
-                'message' => 'Actividad eliminada correctamente'
-            ]);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Error al eliminar actividad']);
-        }
+        
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Error del servidor']);
     }
 }
 
 // ============================================
-// AGREGAR ABASTECIMIENTO DE COMBUSTIBLE
+// AGREGAR COMBUSTIBLE
 // ============================================
 elseif ($action === 'agregar_combustible') {
 
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo json_encode(['success' => false, 'message' => 'Método no permitido']);
-        exit;
-    }
-
     $reporteId = $_POST['reporte_id'] ?? 0;
     $horometro = $_POST['horometro'] ?? 0;
+    $horaAbastecimiento = $_POST['hora_abastecimiento'] ?? date('H:i');
     $galones = $_POST['galones'] ?? 0;
     $observaciones = trim($_POST['observaciones'] ?? '');
 
-    // Validaciones
-    if (!$reporteId || !$horometro || !$galones) {
+    if (!$reporteId || !$galones) {
         echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
         exit;
     }
@@ -271,10 +148,8 @@ elseif ($action === 'agregar_combustible') {
     }
 
     try {
-        // Verificar permisos (igual que actividad)
-        $stmt = $pdo->prepare("
-            SELECT id, usuario_id, estado FROM reportes WHERE id = ?
-        ");
+        // Verificar permisos
+        $stmt = $pdo->prepare("SELECT usuario_id, estado FROM reportes WHERE id = ?");
         $stmt->execute([$reporteId]);
         $reporte = $stmt->fetch();
 
@@ -289,25 +164,20 @@ elseif ($action === 'agregar_combustible') {
         }
 
         if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
+            echo json_encode(['success' => false, 'message' => 'Sin permisos']);
             exit;
         }
 
         // Insertar combustible
         $stmt = $pdo->prepare("
-            INSERT INTO reportes_combustible 
-            (reporte_id, horometro, galones, observaciones) 
-            VALUES (?, ?, ?, ?)
+            INSERT INTO reportes_combustible (reporte_id, horometro, hora_abastecimiento, galones, observaciones) 
+            VALUES (?, ?, ?, ?, ?)
         ");
 
-        if ($stmt->execute([$reporteId, $horometro, $galones, $observaciones])) {
-            echo json_encode([
-                'success' => true,
-                'message' => 'Abastecimiento registrado correctamente',
-                'combustible_id' => $pdo->lastInsertId()
-            ]);
+        if ($stmt->execute([$reporteId, $horometro, $horaAbastecimiento, $galones, $observaciones])) {
+            echo json_encode(['success' => true, 'message' => 'Abastecimiento registrado', 'id' => $pdo->lastInsertId()]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al registrar combustible']);
+            echo json_encode(['success' => false, 'message' => 'Error al registrar']);
         }
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Error del servidor']);
@@ -319,22 +189,21 @@ elseif ($action === 'agregar_combustible') {
 // ============================================
 elseif ($action === 'eliminar_combustible') {
 
-    $combustibleId = $_POST['combustible_id'] ?? 0;
+    $id = $_POST['id'] ?? 0;
 
-    if (!$combustibleId) {
+    if (!$id) {
         echo json_encode(['success' => false, 'message' => 'ID no válido']);
         exit;
     }
 
     try {
-        // Verificar permisos
         $stmt = $pdo->prepare("
             SELECT rc.id, r.usuario_id, r.estado 
             FROM reportes_combustible rc
             INNER JOIN reportes r ON rc.reporte_id = r.id
             WHERE rc.id = ?
         ");
-        $stmt->execute([$combustibleId]);
+        $stmt->execute([$id]);
         $combustible = $stmt->fetch();
 
         if (!$combustible) {
@@ -348,14 +217,13 @@ elseif ($action === 'eliminar_combustible') {
         }
 
         if ($combustible['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
+            echo json_encode(['success' => false, 'message' => 'Sin permisos']);
             exit;
         }
 
-        // Eliminar
         $stmt = $pdo->prepare("DELETE FROM reportes_combustible WHERE id = ?");
 
-        if ($stmt->execute([$combustibleId])) {
+        if ($stmt->execute([$id])) {
             echo json_encode(['success' => true, 'message' => 'Registro eliminado']);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al eliminar']);
@@ -379,10 +247,7 @@ elseif ($action === 'finalizar') {
     }
 
     try {
-        // Verificar que el reporte existe y es del usuario
-        $stmt = $pdo->prepare("
-            SELECT id, usuario_id, estado FROM reportes WHERE id = ?
-        ");
+        $stmt = $pdo->prepare("SELECT usuario_id, estado, horometro_final FROM reportes WHERE id = ?");
         $stmt->execute([$reporteId]);
         $reporte = $stmt->fetch();
 
@@ -392,7 +257,7 @@ elseif ($action === 'finalizar') {
         }
 
         if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
+            echo json_encode(['success' => false, 'message' => 'Sin permisos']);
             exit;
         }
 
@@ -400,41 +265,35 @@ elseif ($action === 'finalizar') {
             echo json_encode(['success' => false, 'message' => 'El reporte ya está finalizado']);
             exit;
         }
-
-        // Verificar que tenga al menos una actividad
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) as total FROM reportes_detalle WHERE reporte_id = ?
-        ");
-        $stmt->execute([$reporteId]);
-
-        if ($stmt->fetch()['total'] == 0) {
-            echo json_encode(['success' => false, 'message' => 'Debe agregar al menos una actividad antes de finalizar']);
+        
+        if ($reporte['horometro_final'] == 0) {
+            echo json_encode(['success' => false, 'message' => 'Debe ingresar el horómetro final antes de finalizar']);
             exit;
         }
 
-        // Finalizar reporte
+        // Verificar que tenga actividades
+        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM reportes_detalle WHERE reporte_id = ?");
+        $stmt->execute([$reporteId]);
+
+        if ($stmt->fetch()['total'] == 0) {
+            echo json_encode(['success' => false, 'message' => 'Debe agregar al menos una actividad (HT o HP)']);
+            exit;
+        }
+
+        // Finalizar
         $stmt = $pdo->prepare("
             UPDATE reportes 
-            SET estado = 'finalizado', 
-                fecha_finalizacion = NOW(),
-                observaciones_generales = ?
+            SET estado = 'finalizado', fecha_finalizacion = NOW(), observaciones_generales = ?
             WHERE id = ?
         ");
 
         if ($stmt->execute([$observacionesGenerales, $reporteId])) {
-            // Registrar en auditoría
-            $stmtAudit = $pdo->prepare("
-                INSERT INTO auditoria (usuario_id, accion, detalle) 
-                VALUES (?, 'finalizar_reporte', ?)
-            ");
-            $stmtAudit->execute([$userId, "Reporte ID: $reporteId finalizado"]);
+            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+            $stmtAudit->execute([$userId, 'finalizar_reporte', "Reporte ID: $reporteId"]);
 
-            echo json_encode([
-                'success' => true,
-                'message' => 'Reporte finalizado correctamente'
-            ]);
+            echo json_encode(['success' => true, 'message' => 'Reporte finalizado']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al finalizar reporte']);
+            echo json_encode(['success' => false, 'message' => 'Error al finalizar']);
         }
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Error del servidor']);
@@ -447,39 +306,42 @@ elseif ($action === 'finalizar') {
 elseif ($action === 'listar') {
     
     try {
-        // Admin y supervisor ven todos, operador solo los suyos
         if ($userRol === 'admin' || $userRol === 'supervisor') {
             $sql = "
                 SELECT 
-                    r.id,
-                    r.fecha,
-                    r.estado,
+                    r.id, r.fecha, r.estado, r.horas_motor,
                     u.nombre_completo as operador,
                     CONCAT(e.categoria, ' - ', e.codigo) as equipo,
-                    COUNT(DISTINCT rd.id) as total_actividades,
-                    COALESCE(SUM(rd.horas_trabajadas), 0) as horas_totales
+                    COUNT(DISTINCT CASE WHEN rd.tipo_hora = 'HT' THEN rd.id END) as total_ht,
+                    COUNT(DISTINCT CASE WHEN rd.tipo_hora = 'HP' THEN rd.id END) as total_hp,
+                    COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HT' THEN rd.horas_transcurridas ELSE 0 END), 0) as horas_ht,
+                    COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HP' THEN rd.horas_transcurridas ELSE 0 END), 0) as horas_hp,
+                    r.total_abastecido,
+                    e.consumo_promedio_hr * r.horas_motor as consumo_estimado
                 FROM reportes r
                 INNER JOIN usuarios u ON r.usuario_id = u.id
                 INNER JOIN equipos e ON r.equipo_id = e.id
                 LEFT JOIN reportes_detalle rd ON r.id = rd.reporte_id
-                GROUP BY r.id, r.fecha, r.estado, u.nombre_completo, e.categoria, e.codigo
+                GROUP BY r.id
                 ORDER BY r.fecha DESC, r.id DESC
             ";
             $stmt = $pdo->query($sql);
         } else {
             $sql = "
                 SELECT 
-                    r.id,
-                    r.fecha,
-                    r.estado,
+                    r.id, r.fecha, r.estado, r.horas_motor,
                     CONCAT(e.categoria, ' - ', e.codigo) as equipo,
-                    COUNT(DISTINCT rd.id) as total_actividades,
-                    COALESCE(SUM(rd.horas_trabajadas), 0) as horas_totales
+                    COUNT(DISTINCT CASE WHEN rd.tipo_hora = 'HT' THEN rd.id END) as total_ht,
+                    COUNT(DISTINCT CASE WHEN rd.tipo_hora = 'HP' THEN rd.id END) as total_hp,
+                    COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HT' THEN rd.horas_transcurridas ELSE 0 END), 0) as horas_ht,
+                    COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HP' THEN rd.horas_transcurridas ELSE 0 END), 0) as horas_hp,
+                    r.total_abastecido,
+                    e.consumo_promedio_hr * r.horas_motor as consumo_estimado
                 FROM reportes r
                 INNER JOIN equipos e ON r.equipo_id = e.id
                 LEFT JOIN reportes_detalle rd ON r.id = rd.reporte_id
                 WHERE r.usuario_id = ?
-                GROUP BY r.id, r.fecha, r.estado, e.categoria, e.codigo
+                GROUP BY r.id
                 ORDER BY r.fecha DESC, r.id DESC
             ";
             $stmt = $pdo->prepare($sql);
@@ -488,92 +350,64 @@ elseif ($action === 'listar') {
         
         $reportes = $stmt->fetchAll();
         
-        // Formato para DataTables
         $data = [];
-        foreach ($reportes as $reporte) {
+        foreach ($reportes as $rep) {
             
-            $estadoBadge = $reporte['estado'] === 'finalizado'
+            $estadoBadge = $rep['estado'] === 'finalizado'
                 ? '<span class="badge badge-success"><i class="fas fa-check"></i> Finalizado</span>' 
                 : '<span class="badge badge-warning"><i class="fas fa-edit"></i> Borrador</span>';
             
-            $horasTexto = number_format($reporte['horas_totales'], 1) . ' hrs';
+            $eficiencia = $rep['horas_motor'] > 0 
+                ? round(($rep['horas_ht'] / $rep['horas_motor']) * 100, 1) . '%'
+                : '-';
             
-            // Botones de acción según rol y estado
             $acciones = '';
             
-            if ($reporte['estado'] === 'borrador') {
-                // BORRADOR
-                if ($userRol === 'operador' || $userRol === 'admin') {
-                    $acciones .= '<a href="editar.php?id=' . $reporte['id'] . '" 
-                        class="btn btn-sm btn-warning" title="Editar">
-                        <i class="fas fa-edit"></i>
-                    </a> ';
-                }
-                if ($userRol === 'supervisor') {
-                    $acciones .= '<a href="ver.php?id=' . $reporte['id'] . '" 
-                        class="btn btn-sm btn-info" title="Ver">
-                        <i class="fas fa-eye"></i>
-                    </a> ';
+            if ($rep['estado'] === 'borrador') {
+                if ($userRol !== 'supervisor') {
+                    $acciones .= '<a href="editar.php?id=' . $rep['id'] . '" class="btn btn-sm btn-warning">
+                        <i class="fas fa-edit"></i></a> ';
                 }
             } else {
-                // FINALIZADO
                 if ($userRol === 'admin') {
-                    $acciones .= '<a href="editar.php?id=' . $reporte['id'] . '" 
-                        class="btn btn-sm btn-warning" title="Editar">
-                        <i class="fas fa-edit"></i>
-                    </a> ';
+                    $acciones .= '<a href="editar.php?id=' . $rep['id'] . '" class="btn btn-sm btn-warning">
+                        <i class="fas fa-edit"></i></a> ';
                 }
-                
-                $acciones .= '<a href="ver.php?id=' . $reporte['id'] . '" 
-                    class="btn btn-sm btn-info" title="Ver">
-                    <i class="fas fa-eye"></i>
-                </a> ';
-                
-                $acciones .= '<a href="../../api/pdf.php?id=' . $reporte['id'] . '" 
-                    target="_blank"
-                    class="btn btn-sm btn-danger" title="PDF">
-                    <i class="fas fa-file-pdf"></i>
-                </a>';
             }
             
+            $acciones .= '<a href="ver.php?id=' . $rep['id'] . '" class="btn btn-sm btn-info">
+                <i class="fas fa-eye"></i></a> ';
+            
             $row = [
-                $reporte['id'],
-                date('d/m/Y', strtotime($reporte['fecha'])),
-                $reporte['equipo'],
-                $reporte['total_actividades'],
-                $horasTexto,
+                $rep['id'],
+                date('d/m/Y', strtotime($rep['fecha'])),
+                $rep['equipo'],
+                number_format($rep['horas_motor'] ?? 0, 1) . ' hrs',
+                number_format($rep['horas_ht'], 1) . ' hrs',
+                number_format($rep['horas_hp'], 1) . ' hrs',
+                $eficiencia,
                 $estadoBadge,
                 $acciones
             ];
             
-            // Si es admin/supervisor, agregar operador en posición 2
             if ($userRol === 'admin' || $userRol === 'supervisor') {
-                array_splice($row, 2, 0, [$reporte['operador']]);
+                array_splice($row, 2, 0, [$rep['operador']]);
             }
             
             $data[] = $row;
         }
         
-        // Usar JSON_UNESCAPED_UNICODE para caracteres especiales
-        echo json_encode([
-            'success' => true,
-            'data' => $data
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         
     } catch (PDOException $e) {
-        // En caso de error, devolver JSON válido
-        echo json_encode([
-            'success' => false, 
-            'message' => 'Error al obtener reportes: ' . $e->getMessage(),
-            'data' => []
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => false, 'message' => 'Error al obtener reportes', 'data' => []], JSON_UNESCAPED_UNICODE);
     }
 }
 
 // ============================================
-// OBTENER DATOS DE UN REPORTE PARA EDITAR
+// OBTENER REPORTE COMPLETO
 // ============================================
-elseif ($action === 'obtener_reporte') {
+elseif ($action === 'obtener') {
 
     $reporteId = $_GET['id'] ?? 0;
 
@@ -583,14 +417,15 @@ elseif ($action === 'obtener_reporte') {
     }
 
     try {
-        // Obtener cabecera del reporte
+        // Cabecera
         $stmt = $pdo->prepare("
             SELECT 
                 r.*,
                 u.nombre_completo as operador,
                 e.codigo as equipo_codigo,
                 e.categoria as equipo_categoria,
-                e.id as equipo_id
+                e.consumo_promedio_hr,
+                e.capacidad_tanque
             FROM reportes r
             INNER JOIN usuarios u ON r.usuario_id = u.id
             INNER JOIN equipos e ON r.equipo_id = e.id
@@ -604,42 +439,15 @@ elseif ($action === 'obtener_reporte') {
             exit;
         }
 
-        // Verificar permisos
-        if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos']);
-            exit;
-        }
-
-        // Obtener actividades
-        $stmt = $pdo->prepare("
-            SELECT 
-                rd.*,
-                tt.nombre as tipo_trabajo,
-                fc.codigo as fase_codigo,
-                fc.descripcion as fase_descripcion
-            FROM reportes_detalle rd
-            INNER JOIN tipos_trabajo tt ON rd.tipo_trabajo_id = tt.id
-            INNER JOIN fases_costo fc ON rd.fase_costo_id = fc.id
-            WHERE rd.reporte_id = ?
-            ORDER BY rd.orden ASC
-        ");
-        $stmt->execute([$reporteId]);
-        $actividades = $stmt->fetchAll();
-
-        // Obtener combustibles
-        $stmt = $pdo->prepare("
-            SELECT * FROM reportes_combustible 
-            WHERE reporte_id = ?
-            ORDER BY fecha_hora ASC
-        ");
-        $stmt->execute([$reporteId]);
-        $combustibles = $stmt->fetchAll();
+        // Calcular consumo estimado
+        $consumoEstimado = $reporte['horas_motor'] * $reporte['consumo_promedio_hr'];
+        $diferenciaCombustible = $reporte['total_abastecido'] - $consumoEstimado;
 
         echo json_encode([
             'success' => true,
             'reporte' => $reporte,
-            'actividades' => $actividades,
-            'combustibles' => $combustibles
+            'consumo_estimado' => round($consumoEstimado, 2),
+            'diferencia_combustible' => round($diferenciaCombustible, 2)
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Error al obtener reporte']);
@@ -651,11 +459,6 @@ elseif ($action === 'obtener_reporte') {
 // ============================================
 elseif ($action === 'eliminar') {
 
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo json_encode(['success' => false, 'message' => 'Método no permitido']);
-        exit;
-    }
-
     $reporteId = $_POST['reporte_id'] ?? 0;
 
     if (!$reporteId) {
@@ -664,10 +467,7 @@ elseif ($action === 'eliminar') {
     }
 
     try {
-        // Verificar que el reporte existe
-        $stmt = $pdo->prepare("
-            SELECT id, usuario_id, estado FROM reportes WHERE id = ?
-        ");
+        $stmt = $pdo->prepare("SELECT usuario_id, estado FROM reportes WHERE id = ?");
         $stmt->execute([$reporteId]);
         $reporte = $stmt->fetch();
 
@@ -676,31 +476,26 @@ elseif ($action === 'eliminar') {
             exit;
         }
 
-        // Solo el dueño o admin pueden eliminar
         if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
-            echo json_encode(['success' => false, 'message' => 'No tiene permisos para eliminar este reporte']);
+            echo json_encode(['success' => false, 'message' => 'Sin permisos']);
             exit;
         }
 
-        // Solo se pueden eliminar borradores
         if ($reporte['estado'] === 'finalizado' && $userRol !== 'admin') {
             echo json_encode(['success' => false, 'message' => 'No se puede eliminar un reporte finalizado']);
             exit;
         }
 
-        // Verificar que NO tenga actividades
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) as total FROM reportes_detalle WHERE reporte_id = ?
-        ");
+        // Verificar que no tenga actividades
+        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM reportes_detalle WHERE reporte_id = ?");
         $stmt->execute([$reporteId]);
-        $totalActividades = $stmt->fetch()['total'];
 
-        if ($totalActividades > 0) {
-            echo json_encode(['success' => false, 'message' => 'No se puede eliminar un reporte con actividades registradas']);
+        if ($stmt->fetch()['total'] > 0) {
+            echo json_encode(['success' => false, 'message' => 'No se puede eliminar un reporte con actividades']);
             exit;
         }
 
-        // Eliminar combustibles si hay (no importa si tiene combustible sin actividades)
+        // Eliminar combustible
         $stmt = $pdo->prepare("DELETE FROM reportes_combustible WHERE reporte_id = ?");
         $stmt->execute([$reporteId]);
 
@@ -708,29 +503,18 @@ elseif ($action === 'eliminar') {
         $stmt = $pdo->prepare("DELETE FROM reportes WHERE id = ?");
 
         if ($stmt->execute([$reporteId])) {
+            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+            $stmtAudit->execute([$userId, 'eliminar_reporte', "Reporte ID: $reporteId (sin actividades)"]);
 
-            // Registrar en auditoría
-            $stmtAudit = $pdo->prepare("
-                INSERT INTO auditoria (usuario_id, accion, detalle) 
-                VALUES (?, 'eliminar_reporte', ?)
-            ");
-            $stmtAudit->execute([$userId, "Reporte ID: $reporteId eliminado (sin actividades)"]);
-
-            echo json_encode([
-                'success' => true,
-                'message' => 'Reporte eliminado correctamente'
-            ]);
+            echo json_encode(['success' => true, 'message' => 'Reporte eliminado']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al eliminar reporte']);
+            echo json_encode(['success' => false, 'message' => 'Error al eliminar']);
         }
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Error del servidor']);
     }
 }
 
-// ============================================
-// ACCIÓN NO VÁLIDA
-// ============================================
 else {
     echo json_encode(['success' => false, 'message' => 'Acción no válida']);
 }
