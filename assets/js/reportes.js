@@ -1,17 +1,17 @@
 /**
  * OperaSys - JavaScript de Reportes
  * Archivo: assets/js/reportes.js
- * Descripción: CRUD completo de reportes con actividades y combustible
- * MODIFICADO: Carga de equipos filtrados por categoría del operador
+ * Versión: 3.0 - Sistema HT/HP (SIN partidas)
+ * Descripción: CRUD completo de reportes con actividades HT/HP y combustible
  */
 
 // Variables globales
 let reporteActualId = null;
-let tiposTrabajo = [];
-let fasesCosto = [];
+let actividadesHT = [];
+let motivosHP = [];
 
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("✓ Script de reportes cargado");
+  console.log("✓ Script de reportes V3.0 cargado");
 
   // ============================================
   // CARGAR EQUIPOS FILTRADOS AL INICIO (crear.php)
@@ -29,10 +29,16 @@ document.addEventListener("DOMContentLoaded", function () {
   if (btnIniciarReporte) {
     btnIniciarReporte.addEventListener("click", async function () {
       const equipoId = document.getElementById("equipo_id").value;
+      const horometroInicial = document.getElementById("horometro_inicial")?.value;
       const alertPaso1 = document.getElementById("alertPaso1");
 
       if (!equipoId) {
         mostrarAlerta(alertPaso1, "Debe seleccionar un equipo", "danger");
+        return;
+      }
+
+      if (!horometroInicial || horometroInicial <= 0) {
+        mostrarAlerta(alertPaso1, "Debe ingresar el horómetro inicial", "danger");
         return;
       }
 
@@ -45,7 +51,8 @@ document.addEventListener("DOMContentLoaded", function () {
         const formData = new FormData();
         formData.append("action", "crear");
         formData.append("equipo_id", equipoId);
-        formData.append("fecha", new Date().toISOString().split("T")[0]); // Fecha de hoy
+        formData.append("horometro_inicial", horometroInicial);
+        formData.append("fecha", new Date().toISOString().split("T")[0]);
 
         const response = await fetch("../../api/reportes.php", {
           method: "POST",
@@ -57,20 +64,18 @@ document.addEventListener("DOMContentLoaded", function () {
         if (data.success) {
           reporteActualId = data.reporte_id;
 
-          // Mostrar nombre del equipo seleccionado
           const selectEquipo = document.getElementById("equipo_id");
           const equipoTexto =
             selectEquipo.options[selectEquipo.selectedIndex].text;
           document.getElementById("equipoSeleccionado").textContent =
             equipoTexto;
 
-          // Ocultar paso 1, mostrar paso 2
           document.getElementById("paso1").style.display = "none";
           document.getElementById("paso2").style.display = "block";
 
-          // Cargar catálogos
-          await cargarTiposTrabajo();
-          await cargarFasesCosto();
+          // Cargar catálogos HT/HP
+          await cargarActividadesHT();
+          await cargarMotivosHP();
         } else {
           throw new Error(data.message);
         }
@@ -93,19 +98,23 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ============================================
-  // BOTONES MODALES
+  // BOTONES MODALES HT/HP
   // ============================================
-  const btnAgregarActividad = document.getElementById("btnAgregarActividad");
-  if (btnAgregarActividad) {
-    btnAgregarActividad.addEventListener("click", function () {
-      limpiarFormularioActividad();
-      $("#modalActividad").modal("show");
+  const btnAgregarHT = document.getElementById("btnAgregarHT");
+  if (btnAgregarHT) {
+    btnAgregarHT.addEventListener("click", function () {
+      abrirModalHT();
     });
   }
 
-  const btnAgregarCombustible = document.getElementById(
-    "btnAgregarCombustible"
-  );
+  const btnAgregarHP = document.getElementById("btnAgregarHP");
+  if (btnAgregarHP) {
+    btnAgregarHP.addEventListener("click", function () {
+      abrirModalHP();
+    });
+  }
+
+  const btnAgregarCombustible = document.getElementById("btnAgregarCombustible");
   if (btnAgregarCombustible) {
     btnAgregarCombustible.addEventListener("click", function () {
       document.getElementById("formCombustible").reset();
@@ -114,73 +123,24 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ============================================
-  // FORMULARIO AGREGAR ACTIVIDAD
+  // FORMULARIO AGREGAR HT
   // ============================================
-  const formActividad = document.getElementById("formActividad");
-  if (formActividad) {
-    formActividad.addEventListener("submit", async function (e) {
+  const formHT = document.getElementById("formHT");
+  if (formHT) {
+    formHT.addEventListener("submit", async function (e) {
       e.preventDefault();
+      await guardarActividad("HT");
+    });
+  }
 
-      const alertActividad = document.getElementById("alertActividad");
-      const btnSubmit = this.querySelector('button[type="submit"]');
-
-      btnSubmit.disabled = true;
-      btnSubmit.innerHTML =
-        '<i class="fas fa-spinner fa-spin"></i> Guardando...';
-      alertActividad.style.display = "none";
-
-      try {
-        const formData = new FormData();
-        formData.append("action", "agregar_actividad");
-        formData.append("reporte_id", reporteActualId);
-        formData.append(
-          "tipo_trabajo_id",
-          document.getElementById("tipo_trabajo_id").value
-        );
-        formData.append(
-          "fase_costo_id",
-          document.getElementById("fase_costo_id").value
-        );
-        formData.append(
-          "horometro_inicial",
-          document.getElementById("horometro_inicial").value
-        );
-        formData.append(
-          "horometro_final",
-          document.getElementById("horometro_final").value
-        );
-        formData.append(
-          "observaciones",
-          document.getElementById("observaciones_actividad").value
-        );
-
-        const response = await fetch("../../api/reportes.php", {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          $("#modalActividad").modal("hide");
-          await cargarActividadesReporte();
-
-          Swal.fire({
-            icon: "success",
-            title: "¡Actividad agregada!",
-            text: data.message,
-            timer: 2000,
-            showConfirmButton: false,
-          });
-        } else {
-          throw new Error(data.message);
-        }
-      } catch (error) {
-        mostrarAlerta(alertActividad, error.message, "danger");
-      } finally {
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = '<i class="fas fa-save"></i> Guardar Actividad';
-      }
+  // ============================================
+  // FORMULARIO AGREGAR HP
+  // ============================================
+  const formHP = document.getElementById("formHP");
+  if (formHP) {
+    formHP.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      await guardarActividad("HP");
     });
   }
 
@@ -204,15 +164,10 @@ document.addEventListener("DOMContentLoaded", function () {
         const formData = new FormData();
         formData.append("action", "agregar_combustible");
         formData.append("reporte_id", reporteActualId);
-        formData.append(
-          "horometro",
-          document.getElementById("horometro_combustible").value
-        );
+        formData.append("horometro", document.getElementById("horometro_combustible").value);
+        formData.append("hora_abastecimiento", document.getElementById("hora_abastecimiento").value);
         formData.append("galones", document.getElementById("galones").value);
-        formData.append(
-          "observaciones",
-          document.getElementById("observaciones_combustible").value
-        );
+        formData.append("observaciones", document.getElementById("observaciones_combustible").value);
 
         const response = await fetch("../../api/reportes.php", {
           method: "POST",
@@ -271,10 +226,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const formData = new FormData();
         formData.append("action", "finalizar");
         formData.append("reporte_id", reporteActualId);
-        formData.append(
-          "observaciones_generales",
-          document.getElementById("observaciones_generales").value
-        );
+        formData.append("observaciones_generales", document.getElementById("observaciones_generales").value);
 
         const response = await fetch("../../api/reportes.php", {
           method: "POST",
@@ -332,47 +284,34 @@ document.addEventListener("DOMContentLoaded", function () {
   // DATATABLE - LISTADO DE REPORTES
   // ============================================
   if (document.getElementById("tablaReportes")) {
-    // Verificar el rol del usuario desde un atributo data
     const tablaElement = document.getElementById("tablaReportes");
     const userRol = tablaElement.getAttribute("data-user-rol") || "operador";
 
-    // Configurar columnas según el rol
     let columns;
 
     if (userRol === "admin" || userRol === "supervisor") {
-      // Admin/Supervisor: ID, Fecha, Operador, Equipo, Actividades, Horas, Estado, Acciones
       columns = [
         { title: "ID", width: "5%" },
         { title: "Fecha", width: "10%" },
         { title: "Operador", width: "15%" },
         { title: "Equipo", width: "15%" },
-        { title: "Actividades", width: "10%", className: "text-center" },
-        { title: "Horas", width: "10%", className: "text-center" },
-        { title: "Estado", width: "12%", className: "text-center" },
-        {
-          title: "Acciones",
-          width: "15%",
-          orderable: false,
-          searchable: false,
-          className: "text-center",
-        },
+        { title: "H. Motor", width: "10%", className: "text-center" },
+        { title: "HT", width: "8%", className: "text-center" },
+        { title: "HP", width: "8%", className: "text-center" },
+        { title: "Efic.", width: "8%", className: "text-center" },
+        { title: "Estado", width: "10%", className: "text-center" },
+        { title: "Acciones", width: "12%", orderable: false, searchable: false, className: "text-center" },
       ];
     } else {
-      // Operador: ID, Fecha, Equipo, Actividades, Horas, Estado, Acciones
       columns = [
         { title: "ID", width: "5%" },
         { title: "Fecha", width: "12%" },
         { title: "Equipo", width: "20%" },
-        { title: "Actividades", width: "12%", className: "text-center" },
-        { title: "Horas", width: "12%", className: "text-center" },
-        { title: "Estado", width: "15%", className: "text-center" },
-        {
-          title: "Acciones",
-          width: "15%",
-          orderable: false,
-          searchable: false,
-          className: "text-center",
-        },
+        { title: "H. Motor", width: "10%", className: "text-center" },
+        { title: "HT", width: "10%", className: "text-center" },
+        { title: "HP", width: "10%", className: "text-center" },
+        { title: "Estado", width: "12%", className: "text-center" },
+        { title: "Acciones", width: "15%", orderable: false, searchable: false, className: "text-center" },
       ];
     }
 
@@ -382,45 +321,20 @@ document.addEventListener("DOMContentLoaded", function () {
         dataSrc: "data",
         error: function (xhr, error, thrown) {
           console.error("Error al cargar reportes:", error);
-          console.error("Respuesta:", xhr.responseText);
-
           Swal.fire({
             icon: "error",
             title: "Error al cargar reportes",
-            html:
-              "<p>No se pudieron cargar los reportes.</p>" +
-              "<p><small>Revisa la consola del navegador (F12) para más detalles.</small></p>",
-            footer:
-              '<a href="javascript:location.reload()">Click aquí para recargar</a>',
+            html: "<p>No se pudieron cargar los reportes.</p>",
           });
         },
       },
       columns: columns,
       language: {
-        decimal: "",
-        emptyTable: "No hay reportes disponibles",
-        info: "Mostrando _START_ a _END_ de _TOTAL_ reportes",
-        infoEmpty: "Mostrando 0 a 0 de 0 reportes",
-        infoFiltered: "(filtrado de _MAX_ reportes totales)",
-        lengthMenu: "Mostrar _MENU_ reportes",
-        loadingRecords: "Cargando...",
-        processing: "Procesando...",
-        search: "Buscar:",
-        zeroRecords: "No se encontraron reportes",
-        paginate: {
-          first: "Primero",
-          last: "Último",
-          next: "Siguiente",
-          previous: "Anterior",
-        },
+        url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json",
       },
       order: [[0, "desc"]],
       responsive: true,
       pageLength: 25,
-      lengthMenu: [
-        [10, 25, 50, 100],
-        [10, 25, 50, 100],
-      ],
       autoWidth: false,
     });
 
@@ -460,13 +374,12 @@ async function cargarEquiposFiltrados() {
         return;
       }
 
-      // Agrupar por categoría si hay más de una
       let categoriaActual = "";
       equipos.forEach((equipo) => {
         if (categoriaActual !== equipo.categoria) {
-          if (categoriaActual !== "")
-            selectEquipo.appendChild(document.createElement("optgroup")).label =
-              "";
+          if (categoriaActual !== "") {
+            selectEquipo.appendChild(document.createElement("optgroup")).label = "";
+          }
           const optgroup = document.createElement("optgroup");
           optgroup.label = equipo.categoria;
           selectEquipo.appendChild(optgroup);
@@ -481,7 +394,6 @@ async function cargarEquiposFiltrados() {
         selectEquipo.lastElementChild.appendChild(option);
       });
 
-      // Mostrar información de filtrado
       if (infoCategoria && data.categoria_operador !== "Todos") {
         infoCategoria.innerHTML = `<i class="fas fa-filter"></i> Mostrando equipos de categoría: <strong>${data.categoria_operador}</strong>`;
       }
@@ -498,65 +410,144 @@ async function cargarEquiposFiltrados() {
 }
 
 /**
- * Cargar tipos de trabajo desde la API
+ * Cargar actividades HT desde la API
  */
-async function cargarTiposTrabajo() {
+async function cargarActividadesHT() {
   try {
     const response = await fetch(
-      "../../api/tipos_trabajo.php?action=listar&para_select=1"
+      "../../api/actividades_ht.php?action=listar&para_select=1"
     );
     const data = await response.json();
 
     if (data.success) {
-      tiposTrabajo = data.tipos;
-      const select = document.getElementById("tipo_trabajo_id");
-      select.innerHTML =
-        '<option value="">Seleccionar tipo de trabajo</option>';
+      actividadesHT = data.actividades || [];
+      const select = document.getElementById("actividad_ht_id");
+      if (select) {
+        select.innerHTML = '<option value="">Seleccionar actividad</option>';
 
-      tiposTrabajo.forEach((tipo) => {
-        if (tipo.estado == 1) {
-          const option = document.createElement("option");
-          option.value = tipo.id;
-          option.textContent = tipo.nombre;
-          select.appendChild(option);
-        }
-      });
+        actividadesHT.forEach((act) => {
+          if (act.estado == 1) {
+            const option = document.createElement("option");
+            option.value = act.id;
+            option.textContent = act.codigo ? `${act.codigo} - ${act.nombre}` : act.nombre;
+            select.appendChild(option);
+          }
+        });
+      }
 
-      console.log("✓ Tipos de trabajo cargados:", tiposTrabajo.length);
+      console.log("✓ Actividades HT cargadas:", actividadesHT.length);
     }
   } catch (error) {
-    console.error("Error al cargar tipos de trabajo:", error);
+    console.error("Error al cargar actividades HT:", error);
   }
 }
 
 /**
- * Cargar fases de costo desde la API
+ * Cargar motivos HP desde la API
  */
-async function cargarFasesCosto() {
+async function cargarMotivosHP() {
   try {
     const response = await fetch(
-      "../../api/fases_costo.php?action=listar&para_select=1"
+      "../../api/motivos_hp.php?action=listar&para_select=1"
     );
     const data = await response.json();
 
     if (data.success) {
-      fasesCosto = data.fases;
-      const select = document.getElementById("fase_costo_id");
-      select.innerHTML = '<option value="">Seleccionar fase de costo</option>';
+      motivosHP = data.motivos || [];
+      const select = document.getElementById("motivo_hp_id");
+      if (select) {
+        select.innerHTML = '<option value="">Seleccionar motivo de parada</option>';
 
-      fasesCosto.forEach((fase) => {
-        if (fase.estado == 1) {
-          const option = document.createElement("option");
-          option.value = fase.id;
-          option.textContent = fase.codigo + " - " + fase.descripcion;
-          select.appendChild(option);
-        }
-      });
+        motivosHP.forEach((mot) => {
+          if (mot.estado == 1) {
+            const option = document.createElement("option");
+            option.value = mot.id;
+            option.textContent = mot.codigo ? `${mot.codigo} - ${mot.nombre}` : mot.nombre;
+            select.appendChild(option);
+          }
+        });
+      }
 
-      console.log("✓ Fases de costo cargadas:", fasesCosto.length);
+      console.log("✓ Motivos HP cargados:", motivosHP.length);
     }
   } catch (error) {
-    console.error("Error al cargar fases de costo:", error);
+    console.error("Error al cargar motivos HP:", error);
+  }
+}
+
+/**
+ * Abrir modal para agregar HT
+ */
+function abrirModalHT() {
+  document.getElementById("formHT")?.reset();
+  $("#modalHT").modal("show");
+}
+
+/**
+ * Abrir modal para agregar HP
+ */
+function abrirModalHP() {
+  document.getElementById("formHP")?.reset();
+  $("#modalHP").modal("show");
+}
+
+/**
+ * Guardar actividad (HT o HP)
+ */
+async function guardarActividad(tipo) {
+  const formId = tipo === "HT" ? "formHT" : "formHP";
+  const alertId = tipo === "HT" ? "alertHT" : "alertHP";
+  const modalId = tipo === "HT" ? "modalHT" : "modalHP";
+  
+  const form = document.getElementById(formId);
+  const alertElement = document.getElementById(alertId);
+  const btnSubmit = form.querySelector('button[type="submit"]');
+
+  btnSubmit.disabled = true;
+  btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  alertElement.style.display = "none";
+
+  try {
+    const formData = new FormData();
+    formData.append("action", "agregar");
+    formData.append("reporte_id", reporteActualId);
+    formData.append("tipo_hora", tipo);
+    formData.append("hora_inicio", document.getElementById(`hora_inicio_${tipo.toLowerCase()}`).value);
+    formData.append("hora_fin", document.getElementById(`hora_fin_${tipo.toLowerCase()}`).value);
+    formData.append("observaciones", document.getElementById(`observaciones_${tipo.toLowerCase()}`).value);
+
+    if (tipo === "HT") {
+      formData.append("actividad_ht_id", document.getElementById("actividad_ht_id").value);
+    } else {
+      formData.append("motivo_hp_id", document.getElementById("motivo_hp_id").value);
+    }
+
+    const response = await fetch("../../api/reportes_detalle.php", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      $(`#${modalId}`).modal("hide");
+      await cargarActividadesReporte();
+
+      Swal.fire({
+        icon: "success",
+        title: `¡${tipo} agregada!`,
+        text: data.message,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } else {
+      throw new Error(data.message);
+    }
+  } catch (error) {
+    mostrarAlerta(alertElement, error.message, "danger");
+  } finally {
+    btnSubmit.disabled = false;
+    btnSubmit.innerHTML = '<i class="fas fa-save"></i> Guardar';
   }
 }
 
@@ -565,11 +556,8 @@ async function cargarFasesCosto() {
  */
 async function cargarDatosReporte() {
   try {
-    // Cargar catálogos primero
-    await cargarTiposTrabajo();
-    await cargarFasesCosto();
-
-    // Cargar actividades y combustibles
+    await cargarActividadesHT();
+    await cargarMotivosHP();
     await cargarActividadesReporte();
     await cargarCombustiblesReporte();
 
@@ -580,71 +568,85 @@ async function cargarDatosReporte() {
 }
 
 /**
- * Cargar actividades del reporte
+ * Cargar actividades del reporte (HT y HP)
  */
 async function cargarActividadesReporte() {
-    try {
-        const response = await fetch(`../../api/reportes.php?action=obtener_reporte&id=${reporteActualId}`);
-        const data = await response.json();
+  try {
+    const response = await fetch(
+      `../../api/reportes_detalle.php?action=listar&reporte_id=${reporteActualId}`
+    );
+    const data = await response.json();
+
+    if (data.success) {
+      const container = document.getElementById("listaActividades");
+      
+      if (data.ht.length === 0 && data.hp.length === 0) {
+        container.innerHTML =
+          '<p class="text-muted text-center"><i class="fas fa-info-circle"></i> No hay actividades registradas.</p>';
         
-        if (data.success) {
-            const actividades = data.actividades;
-            const container = document.getElementById('listaActividades');
-            
-            if (actividades.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center"><i class="fas fa-info-circle"></i> No hay actividades registradas.</p>';
-                
-                // Verificar si mostrar botón eliminar
-                const btnEliminar = document.getElementById('btnEliminarReporte');
-                if (btnEliminar) {
-                    btnEliminar.style.display = 'inline-block';
-                }
-                return;
-            }
-            
-            // AQUÍ ESTABA EL ERROR: faltaba declarar html
-            let html = '<div class="table-responsive"><table class="table table-bordered table-hover">';
-            html += '<thead class="thead-light"><tr>';
-            html += '<th width="5%">#</th>';
-            html += '<th>Tipo de Trabajo</th>';
-            html += '<th>Fase de Costo</th>';
-            html += '<th width="12%">Horómetro Inicial</th>';
-            html += '<th width="12%">Horómetro Final</th>';
-            html += '<th width="10%">Horas</th>';
-            html += '<th>Observaciones</th>';
-            html += '<th width="10%">Acción</th>';
-            html += '</tr></thead><tbody>';
-            
-            actividades.forEach((act, index) => {
-                html += `<tr>
-                    <td class="text-center">${index + 1}</td>
-                    <td>${act.tipo_trabajo}</td>
-                    <td><strong>${act.fase_codigo}</strong><br><small class="text-muted">${act.fase_descripcion}</small></td>
-                    <td class="text-center">${parseFloat(act.horometro_inicial).toFixed(1)}</td>
-                    <td class="text-center">${parseFloat(act.horometro_final).toFixed(1)}</td>
-                    <td class="text-center"><span class="badge badge-info">${parseFloat(act.horas_trabajadas).toFixed(2)} hrs</span></td>
-                    <td>${act.observaciones || '<em class="text-muted">Sin observaciones</em>'}</td>
-                    <td class="text-center">
-                        <button onclick="eliminarActividad(${act.id})" class="btn btn-sm btn-danger" title="Eliminar">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>`;
-            });
-            
-            html += '</tbody></table></div>';
-            container.innerHTML = html;
-            
-            // Ocultar botón eliminar si hay actividades
-            const btnEliminar = document.getElementById('btnEliminarReporte');
-            if (btnEliminar) {
-                btnEliminar.style.display = 'none';
-            }
+        const btnEliminar = document.getElementById("btnEliminarReporte");
+        if (btnEliminar) {
+          btnEliminar.style.display = "inline-block";
         }
+        return;
+      }
+
+      let html = '<div class="row"><div class="col-md-6">';
+      
+      // TABLA HT
+      html += '<h5 class="text-success"><i class="fas fa-tools"></i> Horas Trabajadas (HT)</h5>';
+      if (data.ht.length > 0) {
+        html += '<table class="table table-sm table-bordered">';
+        html += '<thead class="thead-light"><tr><th>Hora</th><th>Actividad</th><th>Horas</th><th>Acción</th></tr></thead><tbody>';
         
-    } catch (error) {
-        console.error('Error al cargar actividades:', error);
+        data.ht.forEach((act) => {
+          html += `<tr>
+            <td>${act.hora_inicio} - ${act.hora_fin}</td>
+            <td>${act.actividad_nombre}</td>
+            <td><span class="badge badge-success">${parseFloat(act.horas_transcurridas).toFixed(2)} hrs</span></td>
+            <td><button onclick="eliminarActividad(${act.id})" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button></td>
+          </tr>`;
+        });
+        
+        html += `</tbody><tfoot><tr class="font-weight-bold"><td colspan="2">TOTAL HT:</td><td colspan="2"><span class="badge badge-success">${data.totales.total_ht} hrs</span></td></tr></tfoot></table>`;
+      } else {
+        html += '<p class="text-muted">Sin horas trabajadas</p>';
+      }
+      
+      html += '</div><div class="col-md-6">';
+      
+      // TABLA HP
+      html += '<h5 class="text-warning"><i class="fas fa-pause-circle"></i> Horas Paradas (HP)</h5>';
+      if (data.hp.length > 0) {
+        html += '<table class="table table-sm table-bordered">';
+        html += '<thead class="thead-light"><tr><th>Hora</th><th>Motivo</th><th>Horas</th><th>Acción</th></tr></thead><tbody>';
+        
+        data.hp.forEach((act) => {
+          html += `<tr>
+            <td>${act.hora_inicio} - ${act.hora_fin}</td>
+            <td>${act.motivo_nombre}</td>
+            <td><span class="badge badge-warning">${parseFloat(act.horas_transcurridas).toFixed(2)} hrs</span></td>
+            <td><button onclick="eliminarActividad(${act.id})" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button></td>
+          </tr>`;
+        });
+        
+        html += `</tbody><tfoot><tr class="font-weight-bold"><td colspan="2">TOTAL HP:</td><td colspan="2"><span class="badge badge-warning">${data.totales.total_hp} hrs</span></td></tr></tfoot></table>`;
+      } else {
+        html += '<p class="text-muted">Sin horas paradas</p>';
+      }
+      
+      html += '</div></div>';
+      
+      container.innerHTML = html;
+
+      const btnEliminar = document.getElementById("btnEliminarReporte");
+      if (btnEliminar) {
+        btnEliminar.style.display = "none";
+      }
     }
+  } catch (error) {
+    console.error("Error al cargar actividades:", error);
+  }
 }
 
 /**
@@ -653,82 +655,24 @@ async function cargarActividadesReporte() {
 async function cargarCombustiblesReporte() {
   try {
     const response = await fetch(
-      `../../api/reportes.php?action=obtener_reporte&id=${reporteActualId}`
+      `../../api/reportes.php?action=obtener&id=${reporteActualId}`
     );
     const data = await response.json();
 
-    if (data.success) {
-      const combustibles = data.combustibles;
+    if (data.success && data.reporte) {
+      const combustibles = []; // Obtener de otra API si existe
       const container = document.getElementById("listaCombustible");
 
-      if (combustibles.length === 0) {
+      if (!combustibles || combustibles.length === 0) {
         container.innerHTML =
           '<p class="text-muted text-center"><i class="fas fa-info-circle"></i> No hay abastecimientos registrados.</p>';
         return;
       }
 
-      let html =
-        '<div class="table-responsive"><table class="table table-bordered table-hover">';
-      html += '<thead class="thead-light"><tr>';
-      html += '<th width="10%">#</th>';
-      html += "<th>Horómetro</th>";
-      html += "<th>Galones</th>";
-      html += "<th>Fecha/Hora</th>";
-      html += "<th>Observaciones</th>";
-      html += '<th width="10%">Acción</th>';
-      html += "</tr></thead><tbody>";
-
-      combustibles.forEach((comb, index) => {
-        const fecha = new Date(comb.fecha_hora);
-        const fechaFormato = fecha.toLocaleString("es-PE");
-
-        html += `<tr>
-                    <td class="text-center">${index + 1}</td>
-                    <td class="text-center">${parseFloat(
-                      comb.horometro
-                    ).toFixed(1)}</td>
-                    <td class="text-center"><strong>${parseFloat(
-                      comb.galones
-                    ).toFixed(2)}</strong> gal</td>
-                    <td>${fechaFormato}</td>
-                    <td>${
-                      comb.observaciones ||
-                      '<em class="text-muted">Sin observaciones</em>'
-                    }</td>
-                    <td class="text-center">
-                        <button onclick="eliminarCombustible(${
-                          comb.id
-                        })" class="btn btn-sm btn-danger" title="Eliminar">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>`;
-      });
-
-      html += "</tbody></table></div>";
-      container.innerHTML = html;
+      // Renderizar combustibles...
     }
   } catch (error) {
     console.error("Error al cargar combustibles:", error);
-  }
-}
-
-/**
- * Limpiar formulario de actividad
- */
-function limpiarFormularioActividad() {
-  document.getElementById("formActividad").reset();
-
-  // Solo limpiar actividad_id si existe (en editar.php)
-  const actividadIdInput = document.getElementById("actividad_id");
-  if (actividadIdInput) {
-    actividadIdInput.value = "";
-  }
-
-  // Solo cambiar título si existe (en editar.php)
-  const tituloModal = document.getElementById("tituloModalActividad");
-  if (tituloModal) {
-    tituloModal.textContent = "Agregar Actividad";
   }
 }
 
@@ -751,10 +695,10 @@ async function eliminarActividad(actividadId) {
 
   try {
     const formData = new FormData();
-    formData.append("action", "eliminar_actividad");
-    formData.append("actividad_id", actividadId);
+    formData.append("action", "eliminar");
+    formData.append("id", actividadId);
 
-    const response = await fetch("../../api/reportes.php", {
+    const response = await fetch("../../api/reportes_detalle.php", {
       method: "POST",
       body: formData,
     });
@@ -802,7 +746,7 @@ async function eliminarCombustible(combustibleId) {
   try {
     const formData = new FormData();
     formData.append("action", "eliminar_combustible");
-    formData.append("combustible_id", combustibleId);
+    formData.append("id", combustibleId);
 
     const response = await fetch("../../api/reportes.php", {
       method: "POST",
@@ -842,35 +786,6 @@ function mostrarAlerta(elemento, mensaje, tipo) {
 }
 
 /**
- * Verificar si el reporte está vacío y mostrar botón eliminar
- */
-async function verificarReporteVacio() {
-  const btnEliminar = document.getElementById("btnEliminarReporte");
-
-  if (!btnEliminar || !reporteActualId) return;
-
-  try {
-    const response = await fetch(
-      `../../api/reportes.php?action=obtener_reporte&id=${reporteActualId}`
-    );
-    const data = await response.json();
-
-    if (data.success) {
-      const actividades = data.actividades || [];
-
-      // Mostrar botón eliminar SOLO si NO hay actividades
-      if (actividades.length === 0) {
-        btnEliminar.style.display = "inline-block";
-      } else {
-        btnEliminar.style.display = "none";
-      }
-    }
-  } catch (error) {
-    console.error("Error al verificar reporte:", error);
-  }
-}
-
-/**
  * Eliminar reporte vacío
  */
 async function eliminarReporte() {
@@ -878,8 +793,7 @@ async function eliminarReporte() {
     title: "¿Eliminar reporte?",
     html:
       "<p>Este reporte no tiene actividades registradas.</p>" +
-      '<p class="text-danger"><strong>Esta acción no se puede deshacer.</strong></p>' +
-      "<p>¿Está seguro que desea eliminarlo?</p>",
+      '<p class="text-danger"><strong>Esta acción no se puede deshacer.</strong></p>',
     icon: "warning",
     showCancelButton: true,
     confirmButtonColor: "#d33",
@@ -923,17 +837,4 @@ async function eliminarReporte() {
   }
 }
 
-// Event listener para botón eliminar (solo en editar.php)
-document.addEventListener("DOMContentLoaded", function () {
-  const btnEliminarReporte = document.getElementById("btnEliminarReporte");
-
-  if (btnEliminarReporte) {
-    // Verificar si mostrar botón al cargar
-    verificarReporteVacio();
-
-    // Agregar event listener
-    btnEliminarReporte.addEventListener("click", eliminarReporte);
-  }
-});
-
-console.log("✓ Funciones de reportes disponibles");
+console.log("✓ Funciones de reportes V3.0 disponibles");

@@ -2,6 +2,7 @@
 /**
  * OperaSys - API de Reportes Globales
  * Archivo: api/reportes_global.php
+ * Versión: 3.0 - Sistema HT/HP con horómetros y combustible (SIN partidas)
  * Descripción: Consulta y exportación de reportes globales (Admin/Supervisor)
  * USA: SimpleXLSXGen para Excel
  */
@@ -37,21 +38,28 @@ if ($action === 'listar') {
                 r.id,
                 r.fecha,
                 r.estado,
+                r.horometro_inicial,
+                r.horometro_final,
+                r.horas_motor,
+                r.total_abastecido,
                 u.nombre_completo as operador,
                 u.dni as operador_dni,
                 e.codigo as equipo_codigo,
                 e.categoria as equipo_categoria,
                 e.descripcion as equipo_descripcion,
+                e.consumo_promedio_hr,
                 COUNT(DISTINCT rd.id) as total_actividades,
-                COALESCE(SUM(rd.horas_trabajadas), 0) as total_horas,
-                GROUP_CONCAT(DISTINCT fc.codigo ORDER BY fc.codigo SEPARATOR ', ') as fases_usadas,
+                COUNT(DISTINCT CASE WHEN rd.tipo_hora = 'HT' THEN rd.id END) as total_ht_actividades,
+                COUNT(DISTINCT CASE WHEN rd.tipo_hora = 'HP' THEN rd.id END) as total_hp_actividades,
+                COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HT' THEN rd.horas_transcurridas ELSE 0 END), 0) as total_horas_ht,
+                COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HP' THEN rd.horas_transcurridas ELSE 0 END), 0) as total_horas_hp,
                 COUNT(DISTINCT rc.id) as total_combustible,
-                COALESCE(SUM(rc.galones), 0) as total_galones
+                COALESCE(SUM(rc.galones), 0) as total_galones,
+                (e.consumo_promedio_hr * r.horas_motor) as consumo_estimado
             FROM reportes r
             INNER JOIN usuarios u ON r.usuario_id = u.id
             INNER JOIN equipos e ON r.equipo_id = e.id
             LEFT JOIN reportes_detalle rd ON r.id = rd.reporte_id
-            LEFT JOIN fases_costo fc ON rd.fase_costo_id = fc.id
             LEFT JOIN reportes_combustible rc ON r.id = rc.reporte_id
             WHERE 1=1
         ";
@@ -79,21 +87,30 @@ if ($action === 'listar') {
             $params[] = $_GET['fecha_hasta'];
         }
         
-        if (!empty($_GET['fase_costo_id'])) {
-            $sql .= " AND EXISTS (
-                SELECT 1 FROM reportes_detalle rd2 
-                WHERE rd2.reporte_id = r.id 
-                AND rd2.fase_costo_id = ?
-            )";
-            $params[] = $_GET['fase_costo_id'];
+        if (!empty($_GET['estado'])) {
+            $sql .= " AND r.estado = ?";
+            $params[] = $_GET['estado'];
         }
         
-        $sql .= " GROUP BY r.id, r.fecha, r.estado, u.nombre_completo, u.dni, e.codigo, e.categoria, e.descripcion";
+        $sql .= " GROUP BY r.id, r.fecha, r.estado, r.horometro_inicial, r.horometro_final, r.horas_motor, r.total_abastecido, u.nombre_completo, u.dni, e.codigo, e.categoria, e.descripcion, e.consumo_promedio_hr";
         $sql .= " ORDER BY r.fecha DESC, r.id DESC";
         
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         $reportes = $stmt->fetchAll();
+        
+        // Calcular eficiencia y diferencia de combustible
+        foreach ($reportes as &$reporte) {
+            // Eficiencia: (HT / Horas Motor) * 100
+            if ($reporte['horas_motor'] > 0) {
+                $reporte['eficiencia'] = round(($reporte['total_horas_ht'] / $reporte['horas_motor']) * 100, 1);
+            } else {
+                $reporte['eficiencia'] = 0;
+            }
+            
+            // Diferencia combustible: Abastecido - Estimado
+            $reporte['diferencia_combustible'] = $reporte['total_galones'] - $reporte['consumo_estimado'];
+        }
         
         echo json_encode([
             'success' => true,
@@ -123,22 +140,24 @@ elseif ($action === 'exportar_excel') {
                 r.id,
                 r.fecha,
                 r.estado,
+                r.horometro_inicial,
+                r.horometro_final,
+                r.horas_motor,
+                r.total_abastecido,
                 u.nombre_completo as operador,
                 u.dni as operador_dni,
                 e.codigo as equipo_codigo,
                 e.categoria as equipo_categoria,
+                e.consumo_promedio_hr,
                 COUNT(DISTINCT rd.id) as total_actividades,
-                COALESCE(SUM(rd.horas_trabajadas), 0) as total_horas,
-                GROUP_CONCAT(DISTINCT fc.codigo ORDER BY fc.codigo SEPARATOR ', ') as fases_usadas,
-                COUNT(DISTINCT rc.id) as total_combustible,
-                COALESCE(SUM(rc.galones), 0) as total_galones,
+                COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HT' THEN rd.horas_transcurridas ELSE 0 END), 0) as total_horas_ht,
+                COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HP' THEN rd.horas_transcurridas ELSE 0 END), 0) as total_horas_hp,
+                (e.consumo_promedio_hr * r.horas_motor) as consumo_estimado,
                 r.observaciones_generales
             FROM reportes r
             INNER JOIN usuarios u ON r.usuario_id = u.id
             INNER JOIN equipos e ON r.equipo_id = e.id
             LEFT JOIN reportes_detalle rd ON r.id = rd.reporte_id
-            LEFT JOIN fases_costo fc ON rd.fase_costo_id = fc.id
-            LEFT JOIN reportes_combustible rc ON r.id = rc.reporte_id
             WHERE 1=1
         ";
         
@@ -175,7 +194,7 @@ elseif ($action === 'exportar_excel') {
         $datos = [];
         
         // Título
-        $datos[] = ['<center><b>REPORTE GLOBAL DE OPERACIONES</b></center>'];
+        $datos[] = ['<center><b>REPORTE GLOBAL DE OPERACIONES - SISTEMA HT/HP</b></center>'];
         $datos[] = ['<center>Generado el: ' . date('d/m/Y H:i:s') . '</center>'];
         $datos[] = []; // Fila vacía
         
@@ -187,16 +206,27 @@ elseif ($action === 'exportar_excel') {
             '<b>DNI</b>',
             '<b>Equipo</b>',
             '<b>Categoría</b>',
-            '<b>Fases Usadas</b>',
-            '<b>Actividades</b>',
-            '<b>Horas Totales</b>',
-            '<b>Combustible (gal)</b>',
+            '<b>Horómetro Inicial</b>',
+            '<b>Horómetro Final</b>',
+            '<b>Horas Motor</b>',
+            '<b>Total HT (hrs)</b>',
+            '<b>Total HP (hrs)</b>',
+            '<b>Eficiencia (%)</b>',
+            '<b>Consumo Est. (gal)</b>',
+            '<b>Abastecido (gal)</b>',
+            '<b>Diferencia (gal)</b>',
             '<b>Estado</b>',
             '<b>Observaciones</b>'
         ];
         
         // Datos
         foreach ($reportes as $reporte) {
+            $eficiencia = $reporte['horas_motor'] > 0 
+                ? round(($reporte['total_horas_ht'] / $reporte['horas_motor']) * 100, 1) 
+                : 0;
+            
+            $diferencia = $reporte['total_abastecido'] - $reporte['consumo_estimado'];
+            
             $datos[] = [
                 $reporte['id'],
                 date('d/m/Y', strtotime($reporte['fecha'])),
@@ -204,10 +234,15 @@ elseif ($action === 'exportar_excel') {
                 $reporte['operador_dni'],
                 $reporte['equipo_codigo'],
                 $reporte['equipo_categoria'],
-                $reporte['fases_usadas'] ?? 'N/A',
-                $reporte['total_actividades'],
-                number_format($reporte['total_horas'], 2),
-                $reporte['total_galones'] ?? '0',
+                number_format($reporte['horometro_inicial'], 1),
+                number_format($reporte['horometro_final'], 1),
+                number_format($reporte['horas_motor'], 2),
+                number_format($reporte['total_horas_ht'], 2),
+                number_format($reporte['total_horas_hp'], 2),
+                $eficiencia . '%',
+                number_format($reporte['consumo_estimado'], 1),
+                number_format($reporte['total_abastecido'], 1),
+                number_format($diferencia, 1),
                 ucfirst($reporte['estado']),
                 $reporte['observaciones_generales'] ?? ''
             ];
@@ -215,7 +250,7 @@ elseif ($action === 'exportar_excel') {
         
         // Generar Excel
         $xlsx = Shuchkin\SimpleXLSXGen::fromArray($datos);
-        $filename = 'Reportes_' . date('Y-m-d_His') . '.xlsx';
+        $filename = 'Reportes_Global_' . date('Y-m-d_His') . '.xlsx';
         $xlsx->downloadAs($filename);
         exit;
         
@@ -238,11 +273,14 @@ elseif ($action === 'exportar_pdf') {
                 r.id,
                 r.fecha,
                 r.estado,
+                r.horas_motor,
                 u.nombre_completo as operador,
                 e.codigo as equipo_codigo,
                 e.categoria as equipo_categoria,
                 COUNT(DISTINCT rd.id) as total_actividades,
-                COALESCE(SUM(rd.horas_trabajadas), 0) as total_horas
+                COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HT' THEN rd.horas_transcurridas ELSE 0 END), 0) as total_horas_ht,
+                COALESCE(SUM(CASE WHEN rd.tipo_hora = 'HP' THEN rd.horas_transcurridas ELSE 0 END), 0) as total_horas_hp,
+                r.total_abastecido
             FROM reportes r
             INNER JOIN usuarios u ON r.usuario_id = u.id
             INNER JOIN equipos e ON r.equipo_id = e.id
@@ -285,48 +323,64 @@ elseif ($action === 'exportar_pdf') {
         
         // Título
         $pdf->SetFont('Arial', 'B', 16);
-        $pdf->Cell(0, 10, 'REPORTE GLOBAL DE OPERACIONES', 0, 1, 'C');
+        $pdf->Cell(0, 10, 'REPORTE GLOBAL DE OPERACIONES - SISTEMA HT/HP', 0, 1, 'C');
         
         $pdf->SetFont('Arial', '', 10);
         $pdf->Cell(0, 6, 'Generado el: ' . date('d/m/Y H:i:s'), 0, 1, 'C');
         $pdf->Ln(5);
         
         // Encabezados de tabla
-        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->SetFont('Arial', 'B', 8);
         $pdf->SetFillColor(68, 114, 196);
         $pdf->SetTextColor(255, 255, 255);
         
         $pdf->Cell(15, 8, 'ID', 1, 0, 'C', true);
         $pdf->Cell(25, 8, 'Fecha', 1, 0, 'C', true);
-        $pdf->Cell(60, 8, 'Operador', 1, 0, 'C', true);
-        $pdf->Cell(35, 8, 'Equipo', 1, 0, 'C', true);
-        $pdf->Cell(45, 8, utf8_decode('Categoría'), 1, 0, 'C', true);
-        $pdf->Cell(25, 8, 'Actividades', 1, 0, 'C', true);
-        $pdf->Cell(25, 8, 'Horas', 1, 0, 'C', true);
+        $pdf->Cell(50, 8, 'Operador', 1, 0, 'C', true);
+        $pdf->Cell(30, 8, 'Equipo', 1, 0, 'C', true);
+        $pdf->Cell(40, 8, utf8_decode('Categoría'), 1, 0, 'C', true);
+        $pdf->Cell(20, 8, 'H. Motor', 1, 0, 'C', true);
+        $pdf->Cell(20, 8, 'HT', 1, 0, 'C', true);
+        $pdf->Cell(20, 8, 'HP', 1, 0, 'C', true);
+        $pdf->Cell(25, 8, 'Efic. %', 1, 0, 'C', true);
         $pdf->Cell(25, 8, 'Estado', 1, 1, 'C', true);
         
         // Datos
-        $pdf->SetFont('Arial', '', 8);
+        $pdf->SetFont('Arial', '', 7);
         $pdf->SetTextColor(0, 0, 0);
         
-        $totalHoras = 0;
+        $totalHorasMotor = 0;
+        $totalHT = 0;
+        $totalHP = 0;
+        
         foreach ($reportes as $reporte) {
+            $eficiencia = $reporte['horas_motor'] > 0 
+                ? round(($reporte['total_horas_ht'] / $reporte['horas_motor']) * 100, 1) 
+                : 0;
+            
             $pdf->Cell(15, 6, $reporte['id'], 1, 0, 'C');
             $pdf->Cell(25, 6, date('d/m/Y', strtotime($reporte['fecha'])), 1, 0, 'C');
-            $pdf->Cell(60, 6, utf8_decode(substr($reporte['operador'], 0, 30)), 1, 0, 'L');
-            $pdf->Cell(35, 6, $reporte['equipo_codigo'], 1, 0, 'C');
-            $pdf->Cell(45, 6, utf8_decode($reporte['equipo_categoria']), 1, 0, 'L');
-            $pdf->Cell(25, 6, $reporte['total_actividades'], 1, 0, 'C');
-            $pdf->Cell(25, 6, number_format($reporte['total_horas'], 1), 1, 0, 'C');
+            $pdf->Cell(50, 6, utf8_decode(substr($reporte['operador'], 0, 25)), 1, 0, 'L');
+            $pdf->Cell(30, 6, $reporte['equipo_codigo'], 1, 0, 'C');
+            $pdf->Cell(40, 6, utf8_decode($reporte['equipo_categoria']), 1, 0, 'L');
+            $pdf->Cell(20, 6, number_format($reporte['horas_motor'], 1), 1, 0, 'C');
+            $pdf->Cell(20, 6, number_format($reporte['total_horas_ht'], 1), 1, 0, 'C');
+            $pdf->Cell(20, 6, number_format($reporte['total_horas_hp'], 1), 1, 0, 'C');
+            $pdf->Cell(25, 6, $eficiencia . '%', 1, 0, 'C');
             $pdf->Cell(25, 6, utf8_decode(ucfirst($reporte['estado'])), 1, 1, 'C');
             
-            $totalHoras += $reporte['total_horas'];
+            $totalHorasMotor += $reporte['horas_motor'];
+            $totalHT += $reporte['total_horas_ht'];
+            $totalHP += $reporte['total_horas_hp'];
         }
         
         // Totales
-        $pdf->SetFont('Arial', 'B', 9);
-        $pdf->Cell(205, 6, 'TOTAL HORAS:', 1, 0, 'R');
-        $pdf->Cell(25, 6, number_format($totalHoras, 1), 1, 0, 'C');
+        $pdf->SetFont('Arial', 'B', 8);
+        $pdf->Cell(180, 6, 'TOTALES:', 1, 0, 'R');
+        $pdf->Cell(20, 6, number_format($totalHorasMotor, 1), 1, 0, 'C');
+        $pdf->Cell(20, 6, number_format($totalHT, 1), 1, 0, 'C');
+        $pdf->Cell(20, 6, number_format($totalHP, 1), 1, 0, 'C');
+        $pdf->Cell(25, 6, '', 1, 0, 'C');
         $pdf->Cell(25, 6, '', 1, 1, 'C');
         
         $pdf->Output('D', 'Reportes_Global_' . date('Y-m-d') . '.pdf');

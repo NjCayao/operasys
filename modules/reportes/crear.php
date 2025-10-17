@@ -2,8 +2,8 @@
 /**
  * OperaSys - Crear Reporte Diario
  * Archivo: modules/reportes/crear.php
- * Descripción: Formulario con actividades dinámicas y combustible
- * MODIFICADO: Select de equipos filtrado por categoría del operador
+ * Versión: 3.0 - Sistema HT/HP (SIN partidas)
+ * Descripción: Formulario con actividades HT/HP y combustible
  */
 
 require_once '../../config/config.php';
@@ -11,13 +11,12 @@ require_once '../../config/database.php';
 
 verificarSesion();
 
-// Variables para el layout
 $page_title = 'Nuevo Reporte Diario';
 $page_depth = 2;
 $use_sweetalert = true;
 $custom_js_file = 'assets/js/reportes.js?v=' . ASSETS_VERSION;
+$custom_js_file = 'assets/js/combustible.js?v=' . ASSETS_VERSION;
 
-// Incluir header
 include '../../layouts/header.php';
 include '../../layouts/navbar.php';
 include '../../layouts/sidebar.php';
@@ -47,26 +46,25 @@ include '../../layouts/sidebar.php';
     <section class="content">
         <div class="container-fluid">
             
-            <!-- PASO 1: Seleccionar Equipo -->
+            <!-- PASO 1: Seleccionar Equipo y Horómetro Inicial -->
             <div id="paso1" class="row">
                 <div class="col-md-8 offset-md-2">
                     <div class="card card-primary">
                         <div class="card-header">
                             <h3 class="card-title">
-                                <i class="fas fa-truck-monster"></i> Paso 1: Seleccionar Equipo
+                                <i class="fas fa-truck-monster"></i> Paso 1: Datos Iniciales
                             </h3>
                         </div>
                         <div class="card-body">
-                            <p class="text-muted">
+                            <div class="alert alert-info">
                                 <i class="fas fa-info-circle"></i> 
-                                Seleccione el equipo con el que trabajará hoy. 
-                                <strong>La fecha se registrará automáticamente como hoy (<?php echo date('d/m/Y'); ?>)</strong>
-                            </p>
+                                <strong>Fecha automática:</strong> <?php echo date('d/m/Y'); ?>
+                            </div>
                             
                             <?php if ($_SESSION['rol'] === 'operador'): ?>
-                            <div class="alert alert-info">
+                            <div class="alert alert-success">
                                 <i class="fas fa-filter"></i> 
-                                <strong>Filtrado automático:</strong> Solo se muestran los equipos de tu categoría asignada
+                                Solo se muestran los equipos de tu categoría
                             </div>
                             <?php endif; ?>
                             
@@ -75,9 +73,24 @@ include '../../layouts/sidebar.php';
                                     <i class="fas fa-truck-monster"></i> Equipo <span class="text-danger">*</span>
                                 </label>
                                 <select class="form-control form-control-lg" id="equipo_id" required>
-                                    <option value="">Cargando tus equipos...</option>
+                                    <option value="">Cargando equipos...</option>
                                 </select>
                                 <small class="form-text text-muted" id="infoCategoria"></small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="horometro_inicial">
+                                    <i class="fas fa-tachometer-alt"></i> Horómetro Inicial <span class="text-danger">*</span>
+                                </label>
+                                <input type="number" 
+                                       class="form-control form-control-lg" 
+                                       id="horometro_inicial" 
+                                       step="0.1" 
+                                       placeholder="Ej: 1584.5"
+                                       required>
+                                <small class="form-text text-muted">
+                                    Ingrese el horómetro al inicio del día
+                                </small>
                             </div>
                             
                             <div id="alertPaso1" class="alert" style="display: none;"></div>
@@ -90,7 +103,7 @@ include '../../layouts/sidebar.php';
                 </div>
             </div>
 
-            <!-- PASO 2: Reporte con Actividades (Oculto inicialmente) -->
+            <!-- PASO 2: Registrar Actividades HT/HP -->
             <div id="paso2" style="display: none;">
                 <div class="row mb-3">
                     <div class="col-12">
@@ -108,26 +121,29 @@ include '../../layouts/sidebar.php';
                         
                         <!-- Botones de Acción -->
                         <div class="mb-3">
-                            <button type="button" id="btnAgregarActividad" class="btn btn-success">
-                                <i class="fas fa-plus"></i> Agregar Actividad
+                            <button type="button" id="btnAgregarHT" class="btn btn-success">
+                                <i class="fas fa-tools"></i> Agregar Hora Trabajada (HT)
+                            </button>
+                            <button type="button" id="btnAgregarHP" class="btn btn-warning">
+                                <i class="fas fa-pause-circle"></i> Agregar Hora Parada (HP)
                             </button>
                             <button type="button" id="btnAgregarCombustible" class="btn btn-info">
                                 <i class="fas fa-gas-pump"></i> Registrar Combustible
                             </button>
                         </div>
 
-                        <!-- Card de Actividades -->
+                        <!-- Card de Actividades HT/HP -->
                         <div class="card card-primary">
                             <div class="card-header">
                                 <h3 class="card-title">
-                                    <i class="fas fa-tasks"></i> Actividades del Día
+                                    <i class="fas fa-tasks"></i> Actividades del Día (HT/HP)
                                 </h3>
                             </div>
                             <div class="card-body">
                                 <div id="listaActividades">
                                     <p class="text-muted text-center">
                                         <i class="fas fa-info-circle"></i> 
-                                        No hay actividades registradas. Click en "Agregar Actividad" para comenzar.
+                                        No hay actividades registradas. Agregue HT (Horas Trabajadas) o HP (Horas Paradas).
                                     </p>
                                 </div>
                             </div>
@@ -146,6 +162,30 @@ include '../../layouts/sidebar.php';
                                         <i class="fas fa-info-circle"></i> 
                                         No hay abastecimientos registrados.
                                     </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Horómetro Final -->
+                        <div class="card card-secondary">
+                            <div class="card-header">
+                                <h3 class="card-title">
+                                    <i class="fas fa-tachometer-alt"></i> Horómetro Final
+                                </h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="horometro_final">
+                                        Horómetro al finalizar el día <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="horometro_final" 
+                                           step="0.1" 
+                                           placeholder="Ej: 1594.2">
+                                    <small class="form-text text-muted">
+                                        Debe ser mayor al horómetro inicial
+                                    </small>
                                 </div>
                             </div>
                         </div>
@@ -186,68 +226,46 @@ include '../../layouts/sidebar.php';
     </section>
 </div>
 
-<!-- Modal: Agregar Actividad -->
-<div class="modal fade" id="modalActividad" tabindex="-1">
+<!-- Modal: Agregar Hora Trabajada (HT) -->
+<div class="modal fade" id="modalHT" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success">
                 <h5 class="modal-title">
-                    <i class="fas fa-plus"></i> Agregar Actividad
+                    <i class="fas fa-tools"></i> Agregar Hora Trabajada (HT)
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
                 </button>
             </div>
-            <form id="formActividad">
+            <form id="formHT">
                 <div class="modal-body">
                     
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>
-                                    <i class="fas fa-tasks"></i> Tipo de Trabajo <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-control" id="tipo_trabajo_id" required>
-                                    <option value="">Cargando...</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>
-                                    <i class="fas fa-tag"></i> Fase de Costo <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-control" id="fase_costo_id" required>
-                                    <option value="">Cargando...</option>
-                                </select>
-                            </div>
-                        </div>
+                    <div class="alert alert-success">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>HT (Horas Trabajadas):</strong> Horas productivas donde el equipo realiza trabajo efectivo.
                     </div>
 
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label>
-                                    <i class="fas fa-tachometer-alt"></i> Horómetro Inicial <span class="text-danger">*</span>
+                                    <i class="fas fa-clock"></i> Hora Inicio <span class="text-danger">*</span>
                                 </label>
-                                <input type="number" 
+                                <input type="time" 
                                        class="form-control" 
-                                       id="horometro_inicial" 
-                                       step="0.1" 
-                                       placeholder="Ej: 1584.5"
+                                       id="hora_inicio_ht" 
                                        required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label>
-                                    <i class="fas fa-tachometer-alt"></i> Horómetro Final <span class="text-danger">*</span>
+                                    <i class="fas fa-clock"></i> Hora Fin <span class="text-danger">*</span>
                                 </label>
-                                <input type="number" 
+                                <input type="time" 
                                        class="form-control" 
-                                       id="horometro_final" 
-                                       step="0.1" 
-                                       placeholder="Ej: 1585.9"
+                                       id="hora_fin_ht" 
                                        required>
                             </div>
                         </div>
@@ -255,15 +273,24 @@ include '../../layouts/sidebar.php';
 
                     <div class="form-group">
                         <label>
+                            <i class="fas fa-tasks"></i> Actividad <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-control" id="actividad_ht_id" required>
+                            <option value="">Cargando actividades...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
                             <i class="fas fa-comment"></i> Observaciones
                         </label>
                         <textarea class="form-control" 
-                                  id="observaciones_actividad" 
+                                  id="observaciones_ht" 
                                   rows="2"
                                   placeholder="Detalles adicionales (opcional)"></textarea>
                     </div>
 
-                    <div id="alertActividad" class="alert" style="display: none;"></div>
+                    <div id="alertHT" class="alert" style="display: none;"></div>
 
                 </div>
                 <div class="modal-footer">
@@ -271,7 +298,87 @@ include '../../layouts/sidebar.php';
                         <i class="fas fa-times"></i> Cancelar
                     </button>
                     <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save"></i> Guardar Actividad
+                        <i class="fas fa-save"></i> Guardar HT
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Agregar Hora Parada (HP) -->
+<div class="modal fade" id="modalHP" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-pause-circle"></i> Agregar Hora Parada (HP)
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="formHP">
+                <div class="modal-body">
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>HP (Horas Paradas):</strong> Horas no productivas donde el equipo no trabaja.
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>
+                                    <i class="fas fa-clock"></i> Hora Inicio <span class="text-danger">*</span>
+                                </label>
+                                <input type="time" 
+                                       class="form-control" 
+                                       id="hora_inicio_hp" 
+                                       required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>
+                                    <i class="fas fa-clock"></i> Hora Fin <span class="text-danger">*</span>
+                                </label>
+                                <input type="time" 
+                                       class="form-control" 
+                                       id="hora_fin_hp" 
+                                       required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-exclamation-triangle"></i> Motivo de Parada <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-control" id="motivo_hp_id" required>
+                            <option value="">Cargando motivos...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-comment"></i> Observaciones
+                        </label>
+                        <textarea class="form-control" 
+                                  id="observaciones_hp" 
+                                  rows="2"
+                                  placeholder="Detalles adicionales (opcional)"></textarea>
+                    </div>
+
+                    <div id="alertHP" class="alert" style="display: none;"></div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-save"></i> Guardar HP
                     </button>
                 </div>
             </form>
@@ -303,6 +410,16 @@ include '../../layouts/sidebar.php';
                                id="horometro_combustible" 
                                step="0.1" 
                                placeholder="Ej: 1586.5"
+                               required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-clock"></i> Hora de Abastecimiento <span class="text-danger">*</span>
+                        </label>
+                        <input type="time" 
+                               class="form-control" 
+                               id="hora_abastecimiento" 
                                required>
                     </div>
 

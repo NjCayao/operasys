@@ -1,8 +1,8 @@
 <?php
-
 /**
  * OperaSys - Reportes Globales
  * Archivo: modules/admin/reportes_global.php
+ * Versión: 3.0 - Sistema HT/HP (SIN filtro de partidas)
  * Descripción: Ver todos los reportes del sistema (Admin/Supervisor)
  */
 
@@ -13,7 +13,6 @@ require_once '../../includes/auth_check.php';
 verificarSesion();
 verificarPermiso(['admin', 'supervisor']);
 
-// Variables para el layout
 $page_title = 'Reportes Globales';
 $page_depth = 2;
 $use_datatables = true;
@@ -31,7 +30,7 @@ include '../../layouts/sidebar.php';
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0">
-                        <i class="fas fa-chart-bar"></i> Reportes Globales
+                        <i class="fas fa-chart-bar"></i> Reportes Globales - Sistema HT/HP
                     </h1>
                 </div>
                 <div class="col-sm-6">
@@ -74,7 +73,7 @@ include '../../layouts/sidebar.php';
                 </div>
                 <div class="card-body">
                     <form id="formFiltros" class="row">
-                        <div class="col-md-2">
+                        <div class="col-md-3">
                             <label>
                                 <i class="fas fa-user"></i> Operador:
                             </label>
@@ -92,14 +91,6 @@ include '../../layouts/sidebar.php';
                         </div>
                         <div class="col-md-2">
                             <label>
-                                <i class="fas fa-tag"></i> Fase:
-                            </label>
-                            <select class="form-control" name="fase_costo_id" id="filtro_fase">
-                                <option value="">Todas</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label>
                                 <i class="fas fa-calendar"></i> Desde:
                             </label>
                             <input type="date" class="form-control" name="fecha_desde" id="filtro_fecha_desde">
@@ -111,9 +102,19 @@ include '../../layouts/sidebar.php';
                             <input type="date" class="form-control" name="fecha_hasta" id="filtro_fecha_hasta">
                         </div>
                         <div class="col-md-2">
+                            <label>
+                                <i class="fas fa-toggle-on"></i> Estado:
+                            </label>
+                            <select class="form-control" name="estado" id="filtro_estado">
+                                <option value="">Todos</option>
+                                <option value="borrador">Borrador</option>
+                                <option value="finalizado">Finalizado</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
                             <label>&nbsp;</label>
                             <button type="button" class="btn btn-primary btn-block" id="btnAplicarFiltros">
-                                <i class="fas fa-search"></i> Buscar
+                                <i class="fas fa-search"></i>
                             </button>
                         </div>
                     </form>
@@ -133,16 +134,17 @@ include '../../layouts/sidebar.php';
                         data-rol="<?php echo $_SESSION['rol']; ?>">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Fecha</th>
-                                <th>Operador</th>
-                                <th>Equipo</th>
-                                <th>Fases Usadas</th>
-                                <th>Actividades</th>
-                                <th>Horas</th>
-                                <th>Combustible</th>
-                                <th>Estado</th>
-                                <th>Acciones</th>
+                                <th width="5%">ID</th>
+                                <th width="8%">Fecha</th>
+                                <th width="15%">Operador</th>
+                                <th width="12%">Equipo</th>
+                                <th width="8%">H. Motor</th>
+                                <th width="8%">HT</th>
+                                <th width="8%">HP</th>
+                                <th width="8%">Efic.</th>
+                                <th width="10%">Combustible</th>
+                                <th width="8%">Estado</th>
+                                <th width="10%">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>

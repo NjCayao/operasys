@@ -1,8 +1,8 @@
 <?php
-
 /**
  * OperaSys - Editar Reporte
  * Archivo: modules/reportes/editar.php
+ * Versión: 3.0 - Sistema HT/HP (SIN partidas)
  * Descripción: Editar reporte en borrador (operador) o cualquiera (admin)
  */
 
@@ -11,7 +11,6 @@ require_once '../../config/database.php';
 
 verificarSesion();
 
-// Obtener ID del reporte
 $reporteId = $_GET['id'] ?? 0;
 
 if (!$reporteId) {
@@ -41,13 +40,11 @@ try {
         exit;
     }
 
-    // Verificar permisos
     if ($reporte['usuario_id'] != $_SESSION['user_id'] && $_SESSION['rol'] !== 'admin') {
         header('Location: listar.php?error=sin_permisos');
         exit;
     }
 
-    // Solo admin puede editar reportes finalizados
     if ($reporte['estado'] === 'finalizado' && $_SESSION['rol'] !== 'admin') {
         header('Location: ver.php?id=' . $reporteId);
         exit;
@@ -56,13 +53,11 @@ try {
     die('Error: ' . $e->getMessage());
 }
 
-// Variables para el layout
 $page_title = 'Editar Reporte #' . $reporteId;
 $page_depth = 2;
 $use_sweetalert = true;
 $custom_js_file = 'assets/js/reportes.js?v=' . ASSETS_VERSION;
 
-// Incluir header
 include '../../layouts/header.php';
 include '../../layouts/navbar.php';
 include '../../layouts/sidebar.php';
@@ -88,7 +83,6 @@ include '../../layouts/sidebar.php';
         </div>
     </div>
 
-    <!-- Main content -->
     <section class="content">
         <div class="container-fluid">
 
@@ -101,6 +95,7 @@ include '../../layouts/sidebar.php';
                         <strong>Reporte:</strong>
                         Fecha: <strong><?php echo date('d/m/Y', strtotime($reporte['fecha'])); ?></strong> |
                         Equipo: <strong><?php echo htmlspecialchars($reporte['equipo_categoria'] . ' - ' . $reporte['equipo_codigo']); ?></strong> |
+                        Horómetro Inicial: <strong><?php echo number_format($reporte['horometro_inicial'], 1); ?></strong> |
                         Estado:
                         <?php if ($reporte['estado'] === 'finalizado'): ?>
                             <span class="badge badge-success">Finalizado</span>
@@ -119,8 +114,11 @@ include '../../layouts/sidebar.php';
 
                     <!-- Botones de Acción -->
                     <div class="mb-3">
-                        <button type="button" id="btnAgregarActividad" class="btn btn-success">
-                            <i class="fas fa-plus"></i> Agregar Actividad
+                        <button type="button" id="btnAgregarHT" class="btn btn-success">
+                            <i class="fas fa-tools"></i> Agregar HT
+                        </button>
+                        <button type="button" id="btnAgregarHP" class="btn btn-warning">
+                            <i class="fas fa-pause-circle"></i> Agregar HP
                         </button>
                         <button type="button" id="btnAgregarCombustible" class="btn btn-info">
                             <i class="fas fa-gas-pump"></i> Registrar Combustible
@@ -130,11 +128,11 @@ include '../../layouts/sidebar.php';
                         </a>
                     </div>
 
-                    <!-- Card de Actividades -->
+                    <!-- Card de Actividades HT/HP -->
                     <div class="card card-primary">
                         <div class="card-header">
                             <h3 class="card-title">
-                                <i class="fas fa-tasks"></i> Actividades del Día
+                                <i class="fas fa-tasks"></i> Actividades del Día (HT/HP)
                             </h3>
                         </div>
                         <div class="card-body">
@@ -164,6 +162,28 @@ include '../../layouts/sidebar.php';
                         </div>
                     </div>
 
+                    <!-- Horómetro Final -->
+                    <div class="card card-secondary">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="fas fa-tachometer-alt"></i> Horómetro Final
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label for="horometro_final">
+                                    Horómetro al finalizar el día <span class="text-danger">*</span>
+                                </label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="horometro_final" 
+                                       step="0.1" 
+                                       value="<?php echo $reporte['horometro_final']; ?>"
+                                       placeholder="Ej: 1594.2">
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Observaciones Generales -->
                     <div class="card card-secondary">
                         <div class="card-header">
@@ -188,12 +208,9 @@ include '../../layouts/sidebar.php';
                             <button type="button" id="btnFinalizarReporte" class="btn btn-success btn-lg">
                                 <i class="fas fa-check"></i> Finalizar y Enviar
                             </button>
-
-                            <!-- NUEVO: Botón eliminar (solo si NO tiene actividades) -->
                             <button type="button" id="btnEliminarReporte" class="btn btn-danger btn-lg" style="display: none;">
                                 <i class="fas fa-trash"></i> Eliminar Reporte
                             </button>
-
                         <?php else: ?>
                             <?php if ($_SESSION['rol'] === 'admin'): ?>
                                 <button type="button" id="btnGuardarCambios" class="btn btn-primary btn-lg">
@@ -201,7 +218,6 @@ include '../../layouts/sidebar.php';
                                 </button>
                             <?php endif; ?>
                         <?php endif; ?>
-
                         <a href="listar.php" class="btn btn-secondary btn-lg">
                             <i class="fas fa-times"></i> Cancelar
                         </a>
@@ -214,101 +230,114 @@ include '../../layouts/sidebar.php';
     </section>
 </div>
 
-<!-- Modal: Agregar/Editar Actividad -->
-<div class="modal fade" id="modalActividad" tabindex="-1">
+<!-- Modales (mismos que crear.php) -->
+<!-- Modal HT -->
+<div class="modal fade" id="modalHT" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success">
                 <h5 class="modal-title">
-                    <i class="fas fa-plus"></i> <span id="tituloModalActividad">Agregar Actividad</span>
+                    <i class="fas fa-tools"></i> Agregar Hora Trabajada (HT)
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
                 </button>
             </div>
-            <form id="formActividad">
-                <input type="hidden" id="actividad_id">
+            <form id="formHT">
                 <div class="modal-body">
-
+                    <div class="alert alert-success">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>HT:</strong> Horas productivas donde el equipo realiza trabajo efectivo.
+                    </div>
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>
-                                    <i class="fas fa-tasks"></i> Tipo de Trabajo <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-control" id="tipo_trabajo_id" required>
-                                    <option value="">Cargando...</option>
-                                </select>
+                                <label>Hora Inicio <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="hora_inicio_ht" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>
-                                    <i class="fas fa-tag"></i> Fase de Costo <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-control" id="fase_costo_id" required>
-                                    <option value="">Cargando...</option>
-                                </select>
+                                <label>Hora Fin <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="hora_fin_ht" required>
                             </div>
                         </div>
                     </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>
-                                    <i class="fas fa-tachometer-alt"></i> Horómetro Inicial <span class="text-danger">*</span>
-                                </label>
-                                <input type="number"
-                                    class="form-control"
-                                    id="horometro_inicial"
-                                    step="0.1"
-                                    placeholder="Ej: 1584.5"
-                                    required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>
-                                    <i class="fas fa-tachometer-alt"></i> Horómetro Final <span class="text-danger">*</span>
-                                </label>
-                                <input type="number"
-                                    class="form-control"
-                                    id="horometro_final"
-                                    step="0.1"
-                                    placeholder="Ej: 1585.9"
-                                    required>
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="form-group">
-                        <label>
-                            <i class="fas fa-comment"></i> Observaciones
-                        </label>
-                        <textarea class="form-control"
-                            id="observaciones_actividad"
-                            rows="2"
-                            placeholder="Detalles adicionales (opcional)"></textarea>
+                        <label>Actividad <span class="text-danger">*</span></label>
+                        <select class="form-control" id="actividad_ht_id" required>
+                            <option value="">Cargando...</option>
+                        </select>
                     </div>
-
-                    <div id="alertActividad" class="alert" style="display: none;"></div>
-
+                    <div class="form-group">
+                        <label>Observaciones</label>
+                        <textarea class="form-control" id="observaciones_ht" rows="2"></textarea>
+                    </div>
+                    <div id="alertHT" class="alert" style="display: none;"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <i class="fas fa-times"></i> Cancelar
-                    </button>
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save"></i> Guardar
-                    </button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar HT</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Modal: Agregar Combustible -->
+<!-- Modal HP -->
+<div class="modal fade" id="modalHP" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-pause-circle"></i> Agregar Hora Parada (HP)
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="formHP">
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>HP:</strong> Horas no productivas donde el equipo no trabaja.
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Hora Inicio <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="hora_inicio_hp" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Hora Fin <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="hora_fin_hp" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Motivo de Parada <span class="text-danger">*</span></label>
+                        <select class="form-control" id="motivo_hp_id" required>
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Observaciones</label>
+                        <textarea class="form-control" id="observaciones_hp" rows="2"></textarea>
+                    </div>
+                    <div id="alertHP" class="alert" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Guardar HP</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Combustible -->
 <div class="modal fade" id="modalCombustible" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -322,51 +351,27 @@ include '../../layouts/sidebar.php';
             </div>
             <form id="formCombustible">
                 <div class="modal-body">
-
                     <div class="form-group">
-                        <label>
-                            <i class="fas fa-tachometer-alt"></i> Horómetro <span class="text-danger">*</span>
-                        </label>
-                        <input type="number"
-                            class="form-control"
-                            id="horometro_combustible"
-                            step="0.1"
-                            placeholder="Ej: 1586.5"
-                            required>
+                        <label>Horómetro <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="horometro_combustible" step="0.1" required>
                     </div>
-
                     <div class="form-group">
-                        <label>
-                            <i class="fas fa-gas-pump"></i> Galones <span class="text-danger">*</span>
-                        </label>
-                        <input type="number"
-                            class="form-control"
-                            id="galones"
-                            step="0.01"
-                            placeholder="Ej: 45.00"
-                            required>
+                        <label>Hora de Abastecimiento <span class="text-danger">*</span></label>
+                        <input type="time" class="form-control" id="hora_abastecimiento" required>
                     </div>
-
                     <div class="form-group">
-                        <label>
-                            <i class="fas fa-comment"></i> Observaciones
-                        </label>
-                        <textarea class="form-control"
-                            id="observaciones_combustible"
-                            rows="2"
-                            placeholder="Detalles adicionales (opcional)"></textarea>
+                        <label>Galones <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="galones" step="0.01" required>
                     </div>
-
+                    <div class="form-group">
+                        <label>Observaciones</label>
+                        <textarea class="form-control" id="observaciones_combustible" rows="2"></textarea>
+                    </div>
                     <div id="alertCombustible" class="alert" style="display: none;"></div>
-
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <i class="fas fa-times"></i> Cancelar
-                    </button>
-                    <button type="submit" class="btn btn-info">
-                        <i class="fas fa-save"></i> Guardar
-                    </button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info">Guardar</button>
                 </div>
             </form>
         </div>

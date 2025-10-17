@@ -1,13 +1,13 @@
 /**
  * OperaSys - Reportes Globales JS
  * Archivo: assets/js/reportes_global.js
+ * Versión: 3.0 - Sistema HT/HP SIN partidas
  * Descripción: Lógica para ver todos los reportes con filtros y exportación
  */
 
 $(document).ready(function () {
   cargarOperadores();
   cargarCategorias();
-  cargarFases();
   inicializarTabla();
 
   // Event Listeners
@@ -39,36 +39,6 @@ function cargarOperadores() {
     },
     error: function () {
       console.error("Error al cargar operadores");
-    },
-  });
-}
-
-/**
- * Cargar fases de costo para el filtro
- */
-function cargarFases() {
-  $.ajax({
-    url: "../../api/fases_costo.php?action=listar&para_select=1",
-    method: "GET",
-    dataType: "json",
-    success: function (response) {
-      if (response.success) {
-        let html = '<option value="">Todas</option>';
-
-        // La API devuelve "fases" cuando para_select=1
-        const fases = response.fases || response.data || [];
-
-        fases.forEach(function (fase) {
-          if (fase.estado == 1) {
-            html += `<option value="${fase.id}">${fase.codigo} - ${fase.descripcion}</option>`;
-          }
-        });
-
-        $("#filtro_fase").html(html);
-      }
-    },
-    error: function () {
-      console.error("Error al cargar fases");
     },
   });
 }
@@ -114,102 +84,148 @@ function inicializarTabla() {
       },
     },
     columns: [
-      { data: "id" },
-      { data: "fecha" },
-      { data: "operador" },
+      { 
+        data: "id",
+        width: "5%"
+      },
+      { 
+        data: "fecha",
+        width: "8%",
+        render: function(data) {
+          return new Date(data).toLocaleDateString('es-PE');
+        }
+      },
+      { 
+        data: "operador",
+        width: "15%"
+      },
       {
         data: null,
+        width: "12%",
         render: function (data) {
           return `<span class="badge badge-info">${data.equipo_codigo}</span><br>
-                            <small class="text-muted">${data.equipo_categoria}</small>`;
+                  <small class="text-muted">${data.equipo_categoria}</small>`;
         },
       },
       {
-        data: "fases_usadas",
+        data: "horas_motor",
+        width: "8%",
+        className: "text-center",
         render: function (data) {
-          return data
-            ? `<small>${data}</small>`
-            : '<span class="text-muted">N/A</span>';
+          return data ? parseFloat(data).toFixed(1) + " hrs" : "0.0 hrs";
         },
       },
       {
-        data: "total_actividades",
+        data: "total_horas_ht",
+        width: "8%",
+        className: "text-center",
         render: function (data) {
-          return `<span class="badge badge-primary">${data || 0}</span>`;
+          return `<span class="badge badge-success">${parseFloat(data).toFixed(1)} hrs</span>`;
         },
       },
       {
-        data: "total_horas",
+        data: "total_horas_hp",
+        width: "8%",
+        className: "text-center",
         render: function (data) {
-          return data ? parseFloat(data).toFixed(2) + " hrs" : "0.00 hrs";
+          return `<span class="badge badge-warning">${parseFloat(data).toFixed(1)} hrs</span>`;
         },
       },
       {
         data: null,
+        width: "8%",
+        className: "text-center",
+        render: function (data) {
+          const eficiencia = data.eficiencia || 0;
+          let color = 'secondary';
+          
+          if (eficiencia >= 80) color = 'success';
+          else if (eficiencia >= 60) color = 'warning';
+          else if (eficiencia > 0) color = 'danger';
+          
+          return `<span class="badge badge-${color}">${eficiencia}%</span>`;
+        },
+      },
+      {
+        data: null,
+        width: "10%",
+        className: "text-center",
         render: function (data) {
           if (data.total_combustible > 0) {
-            return `<span class="badge badge-success">
-                                    <i class="fas fa-gas-pump"></i> ${parseFloat(
-                                      data.total_galones
-                                    ).toFixed(1)} gal
-                                </span>`;
+            const diferencia = data.diferencia_combustible || 0;
+            const icono = diferencia >= 0 
+              ? '<i class="fas fa-arrow-up text-success"></i>' 
+              : '<i class="fas fa-arrow-down text-danger"></i>';
+            
+            return `<span class="badge badge-info">
+                      <i class="fas fa-gas-pump"></i> ${parseFloat(data.total_galones).toFixed(1)} gal
+                    </span><br>
+                    <small>${icono} ${Math.abs(diferencia).toFixed(1)} gal</small>`;
           }
           return '<span class="text-muted">-</span>';
         },
       },
       {
         data: "estado",
+        width: "8%",
+        className: "text-center",
         render: function (data) {
           const badge = data === "finalizado" ? "success" : "warning";
           const texto = data === "finalizado" ? "Finalizado" : "Borrador";
-          return `<span class="badge badge-${badge}">${texto}</span>`;
+          const icono = data === "finalizado" ? "check" : "edit";
+          return `<span class="badge badge-${badge}">
+                    <i class="fas fa-${icono}"></i> ${texto}
+                  </span>`;
         },
       },
       {
         data: null,
+        width: "12%",
         orderable: false,
+        className: "text-center",
         render: function (data) {
           let botones = `
-                        <a href="../../modules/reportes/ver.php?id=${data.id}" 
-                           class="btn btn-sm btn-info" 
-                           title="Ver detalles">
-                            <i class="fas fa-eye"></i>
-                        </a>
-                        <a href="../../api/pdf.php?id=${data.id}"
-                           class="btn btn-sm btn-danger" 
-                           title="Descargar PDF"
-                           target="_blank">
-                            <i class="fas fa-file-pdf"></i>
-                        </a>
-                    `;
+            <a href="../../modules/reportes/ver.php?id=${data.id}" 
+               class="btn btn-sm btn-info" 
+               title="Ver detalles">
+                <i class="fas fa-eye"></i>
+            </a>
+            <a href="../../api/pdf.php?id=${data.id}"
+               class="btn btn-sm btn-danger" 
+               title="Descargar PDF"
+               target="_blank">
+                <i class="fas fa-file-pdf"></i>
+            </a>
+          `;
 
           // Solo admin puede editar y eliminar
           if (rol === "admin") {
             if (data.estado === "borrador") {
               botones += `
-                                <a href="../../modules/reportes/editar.php?id=${data.id}" 
-                                   class="btn btn-sm btn-warning" 
-                                   title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                            `;
+                <a href="../../modules/reportes/editar.php?id=${data.id}" 
+                   class="btn btn-sm btn-warning" 
+                   title="Editar">
+                    <i class="fas fa-edit"></i>
+                </a>
+              `;
             }
+            
             if (data.total_actividades == 0) {
-                    botones += `
+              botones += `
                 <button onclick="eliminarReporte(${data.id})" 
                         class="btn btn-sm btn-danger" 
                         title="Eliminar">
                     <i class="fas fa-trash"></i>
                 </button>
-            `;
-                    } else {
-                    botones += `
+              `;
+            } else {
+              botones += `
                 <button class="btn btn-sm btn-secondary" 
                         disabled
                         title="No se puede eliminar: tiene ${data.total_actividades} actividad(es)">
                     <i class="fas fa-lock"></i>
                 </button>
-            `;
+              `;
             }
           }
 
@@ -222,6 +238,17 @@ function inicializarTabla() {
       url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json",
       emptyTable: "No hay reportes registrados",
       zeroRecords: "No se encontraron resultados",
+      info: "Mostrando _START_ a _END_ de _TOTAL_ reportes",
+      infoEmpty: "Mostrando 0 a 0 de 0 reportes",
+      infoFiltered: "(filtrado de _MAX_ reportes totales)",
+      lengthMenu: "Mostrar _MENU_ reportes",
+      search: "Buscar:",
+      paginate: {
+        first: "Primero",
+        last: "Último",
+        next: "Siguiente",
+        previous: "Anterior",
+      },
     },
     responsive: true,
     pageLength: 25,
@@ -229,7 +256,11 @@ function inicializarTabla() {
       [10, 25, 50, 100, -1],
       [10, 25, 50, 100, "Todos"],
     ],
+    dom: 'Bfrtip',
+    buttons: []
   });
+  
+  console.log('✓ DataTable de reportes globales inicializado');
 }
 
 /**
@@ -239,9 +270,9 @@ function aplicarFiltros() {
   const filtros = {
     operador_id: $("#filtro_operador").val(),
     categoria: $("#filtro_categoria").val(),
-    fase_costo_id: $("#filtro_fase").val(),
     fecha_desde: $("#filtro_fecha_desde").val(),
     fecha_hasta: $("#filtro_fecha_hasta").val(),
+    estado: $("#filtro_estado").val(),
   };
 
   // Reconstruir URL con filtros
@@ -271,9 +302,9 @@ function exportarExcel() {
   const filtros = new URLSearchParams({
     operador_id: $("#filtro_operador").val() || "",
     categoria: $("#filtro_categoria").val() || "",
-    fase_costo_id: $("#filtro_fase").val() || "",
     fecha_desde: $("#filtro_fecha_desde").val() || "",
     fecha_hasta: $("#filtro_fecha_hasta").val() || "",
+    estado: $("#filtro_estado").val() || "",
   });
 
   window.location.href = `../../api/reportes_global.php?action=exportar_excel&${filtros.toString()}`;
@@ -294,9 +325,9 @@ function exportarPDF() {
   const filtros = new URLSearchParams({
     operador_id: $("#filtro_operador").val() || "",
     categoria: $("#filtro_categoria").val() || "",
-    fase_costo_id: $("#filtro_fase").val() || "",
     fecha_desde: $("#filtro_fecha_desde").val() || "",
     fecha_hasta: $("#filtro_fecha_hasta").val() || "",
+    estado: $("#filtro_estado").val() || "",
   });
 
   window.open(
@@ -319,7 +350,8 @@ function exportarPDF() {
 function eliminarReporte(id) {
   Swal.fire({
     title: "¿Está seguro?",
-    text: "Esta acción no se puede deshacer",
+    html: "<p>Esta acción eliminará el reporte completamente.</p>" +
+          '<p class="text-danger"><strong>Esta acción no se puede deshacer.</strong></p>',
     icon: "warning",
     showCancelButton: true,
     confirmButtonColor: "#d33",
@@ -365,3 +397,5 @@ function eliminarReporte(id) {
     }
   });
 }
+
+console.log('✓ Script reportes_global.js cargado - V3.0');

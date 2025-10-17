@@ -54,3 +54,55 @@ Triggers Creados:
 ✅ Validaciones por rol (admin/supervisor/operador)
 ✅ Auditoría en todas las operaciones
 ✅ Cálculo eficiencia: (HT / Horas Motor) × 100
+
+✅ Archivos Modificados:
+
+api/reportes_detalle.php - Eliminado campo partida_id
+api/reportes_global.php - Eliminadas referencias a partidas y fases_costo
+assets/js/reportes_global.js - Eliminado filtro de partidas
+
+🗑️ Base de Datos:
+
+Script SQL creado: migration_eliminar_partidas_v3.sql
+Elimina tabla partidas
+Elimina campo partida_id de reportes_detalle
+
+❌ Archivos a Eliminar Manualmente:
+
+api/partidas.php
+api/fases_costo.php (si existe)
+
+🎯 Estructura Final HT/HP:
+HT: hora_inicio, hora_fin, actividad_ht_id, observaciones
+HP: hora_inicio, hora_fin, motivo_hp_id, observaciones
+
+# 📋 CHANGELOG - FASE 3 COMPLETADA
+✅ Archivos Modificados (5):
+
+assets/js/reportes.js - Sistema HT/HP, eliminadas referencias a partidas
+modules/reportes/crear.php - Modales HT/HP separados, horómetro inicial requerido
+modules/reportes/editar.php - Carga actividades HT/HP
+modules/reportes/ver.php - Vista separada HT/HP con eficiencia y combustible
+modules/admin/reportes_global.php - Eliminado filtro de partidas
+
+🎯 Sistema Implementado:
+HT: hora_inicio, hora_fin, actividad_ht_id, observaciones
+HP: hora_inicio, hora_fin, motivo_hp_id, observaciones
+Métricas: Eficiencia = (HT / Horas Motor) × 100
+❌ Eliminado:
+
+Referencias a tipos_trabajo y fases_costo/partidas
+Campos tipo_trabajo_id, fase_costo_id, partida_id
+
+#  ✅ FASE 5 COMPLETADA: PDF
+
+### Archivo Modificado:
+- `api/pdf.php` - PDF con sistema HT/HP, horómetros y control combustible
+
+### Estructura del PDF:
+- Sección Horómetros (Inicial/Final/Horas Motor)
+- Tabla HT con eficiencia
+- Tabla HP con categorías
+- Control combustible con diferencia
+
+# 

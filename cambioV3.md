@@ -501,7 +501,7 @@ Entregables:
 ✅ Componentes de validación
 
 
-💻 FASE 4: LÓGICA JAVASCRIPT
+# 💻 FASE 4: LÓGICA JAVASCRIPT
 Duración Estimada: 50 minutos
 Riesgo: 🟡 Medio (lógica compleja)
 4.1 Archivos Nuevos

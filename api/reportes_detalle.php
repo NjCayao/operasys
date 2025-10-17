@@ -2,6 +2,7 @@
 /**
  * OperaSys - API de Reportes Detalle (HT/HP)
  * Archivo: api/reportes_detalle.php
+ * Versión: 3.0 - Sistema HT/HP SIN partidas
  */
 
 require_once '../config/database.php';
@@ -31,7 +32,6 @@ if ($action === 'agregar') {
     
     // Campos para HT
     $actividadHtId = $_POST['actividad_ht_id'] ?? null;
-    $partidaId = $_POST['partida_id'] ?? null;
     
     // Campos para HP
     $motivoHpId = $_POST['motivo_hp_id'] ?? null;
@@ -48,13 +48,19 @@ if ($action === 'agregar') {
     }
     
     // Validar según tipo
-    if ($tipoHora === 'HT' && (!$actividadHtId || !$partidaId)) {
-        echo json_encode(['success' => false, 'message' => 'HT requiere actividad y partida']);
+    if ($tipoHora === 'HT' && !$actividadHtId) {
+        echo json_encode(['success' => false, 'message' => 'HT requiere seleccionar una actividad']);
         exit;
     }
     
     if ($tipoHora === 'HP' && !$motivoHpId) {
-        echo json_encode(['success' => false, 'message' => 'HP requiere motivo de parada']);
+        echo json_encode(['success' => false, 'message' => 'HP requiere seleccionar un motivo de parada']);
+        exit;
+    }
+    
+    // Validar que hora_fin > hora_inicio
+    if (strtotime($horaFin) <= strtotime($horaInicio)) {
+        echo json_encode(['success' => false, 'message' => 'Hora fin debe ser mayor a hora inicio']);
         exit;
     }
     
@@ -84,21 +90,27 @@ if ($action === 'agregar') {
         $stmt->execute([$reporteId]);
         $orden = $stmt->fetch()['nuevo_orden'];
         
-        // Insertar actividad
+        // Insertar actividad (SIN partida_id)
         $stmt = $pdo->prepare("
             INSERT INTO reportes_detalle 
-            (reporte_id, tipo_hora, hora_inicio, hora_fin, actividad_ht_id, partida_id, motivo_hp_id, observaciones, orden) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (reporte_id, tipo_hora, hora_inicio, hora_fin, actividad_ht_id, motivo_hp_id, observaciones, orden) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
-        if ($stmt->execute([$reporteId, $tipoHora, $horaInicio, $horaFin, $actividadHtId, $partidaId, $motivoHpId, $observaciones, $orden])) {
+        if ($stmt->execute([$reporteId, $tipoHora, $horaInicio, $horaFin, $actividadHtId, $motivoHpId, $observaciones, $orden])) {
+            
+            // Auditoría
+            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+            $tipoTexto = $tipoHora === 'HT' ? 'Actividad HT' : 'Parada HP';
+            $stmtAudit->execute([$userId, 'agregar_actividad', "$tipoTexto agregada a reporte #$reporteId"]);
+            
             echo json_encode([
                 'success' => true, 
-                'message' => 'Actividad agregada',
+                'message' => 'Actividad agregada correctamente',
                 'id' => $pdo->lastInsertId()
             ]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error al agregar']);
+            echo json_encode(['success' => false, 'message' => 'Error al agregar actividad']);
         }
         
     } catch (PDOException $e) {
@@ -119,16 +131,15 @@ elseif ($action === 'listar') {
     }
     
     try {
-        // Obtener HT
+        // Obtener HT (SIN partidas)
         $stmtHT = $pdo->prepare("
             SELECT 
                 rd.*,
+                aht.codigo as actividad_codigo,
                 aht.nombre as actividad_nombre,
-                p.codigo as partida_codigo,
-                p.descripcion as partida_descripcion
+                aht.descripcion as actividad_descripcion
             FROM reportes_detalle rd
             LEFT JOIN actividades_ht aht ON rd.actividad_ht_id = aht.id
-            LEFT JOIN partidas p ON rd.partida_id = p.id
             WHERE rd.reporte_id = ? AND rd.tipo_hora = 'HT'
             ORDER BY rd.orden ASC
         ");
@@ -139,8 +150,10 @@ elseif ($action === 'listar') {
         $stmtHP = $pdo->prepare("
             SELECT 
                 rd.*,
+                mhp.codigo as motivo_codigo,
                 mhp.nombre as motivo_nombre,
-                mhp.categoria_parada
+                mhp.categoria_parada,
+                mhp.es_justificada
             FROM reportes_detalle rd
             LEFT JOIN motivos_hp mhp ON rd.motivo_hp_id = mhp.id
             WHERE rd.reporte_id = ? AND rd.tipo_hora = 'HP'
@@ -184,7 +197,7 @@ elseif ($action === 'eliminar') {
     try {
         // Verificar permisos
         $stmt = $pdo->prepare("
-            SELECT rd.id, r.usuario_id, r.estado 
+            SELECT rd.id, rd.tipo_hora, r.usuario_id, r.estado 
             FROM reportes_detalle rd
             INNER JOIN reportes r ON rd.reporte_id = r.id
             WHERE rd.id = ?
@@ -211,6 +224,12 @@ elseif ($action === 'eliminar') {
         $stmt = $pdo->prepare("DELETE FROM reportes_detalle WHERE id = ?");
         
         if ($stmt->execute([$id])) {
+            
+            // Auditoría
+            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+            $tipoTexto = $actividad['tipo_hora'] === 'HT' ? 'Actividad HT' : 'Parada HP';
+            $stmtAudit->execute([$userId, 'eliminar_actividad', "$tipoTexto eliminada (ID: $id)"]);
+            
             echo json_encode(['success' => true, 'message' => 'Actividad eliminada']);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al eliminar']);
@@ -233,11 +252,16 @@ elseif ($action === 'actualizar') {
     
     // Campos opcionales según tipo
     $actividadHtId = $_POST['actividad_ht_id'] ?? null;
-    $partidaId = $_POST['partida_id'] ?? null;
     $motivoHpId = $_POST['motivo_hp_id'] ?? null;
     
     if (!$id || !$horaInicio || !$horaFin) {
         echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+        exit;
+    }
+    
+    // Validar que hora_fin > hora_inicio
+    if (strtotime($horaFin) <= strtotime($horaInicio)) {
+        echo json_encode(['success' => false, 'message' => 'Hora fin debe ser mayor a hora inicio']);
         exit;
     }
     
@@ -267,14 +291,14 @@ elseif ($action === 'actualizar') {
             exit;
         }
         
-        // Actualizar según tipo
+        // Actualizar según tipo (SIN partida_id)
         if ($actividad['tipo_hora'] === 'HT') {
             $stmt = $pdo->prepare("
                 UPDATE reportes_detalle 
-                SET hora_inicio = ?, hora_fin = ?, actividad_ht_id = ?, partida_id = ?, observaciones = ?
+                SET hora_inicio = ?, hora_fin = ?, actividad_ht_id = ?, observaciones = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$horaInicio, $horaFin, $actividadHtId, $partidaId, $observaciones, $id]);
+            $stmt->execute([$horaInicio, $horaFin, $actividadHtId, $observaciones, $id]);
         } else {
             $stmt = $pdo->prepare("
                 UPDATE reportes_detalle 
@@ -283,6 +307,11 @@ elseif ($action === 'actualizar') {
             ");
             $stmt->execute([$horaInicio, $horaFin, $motivoHpId, $observaciones, $id]);
         }
+        
+        // Auditoría
+        $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+        $tipoTexto = $actividad['tipo_hora'] === 'HT' ? 'Actividad HT' : 'Parada HP';
+        $stmtAudit->execute([$userId, 'actualizar_actividad', "$tipoTexto actualizada (ID: $id)"]);
         
         echo json_encode(['success' => true, 'message' => 'Actividad actualizada']);
         
