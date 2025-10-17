@@ -2,6 +2,7 @@
 /**
  * OperaSys - Gestión de Motivos HP
  * Archivo: modules/admin/motivos_hp.php
+ * Versión: 3.0 - COMPLETO Y CORREGIDO
  */
 
 require_once '../../config/config.php';
@@ -103,7 +104,7 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
 
 <!-- Modal: Agregar/Editar Motivo -->
 <div class="modal fade" id="modalMotivo" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-warning">
                 <h5 class="modal-title">
@@ -114,25 +115,44 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                 </button>
             </div>
             <form id="formMotivo">
-                <input type="hidden" id="motivo_id">
+                <input type="hidden" id="motivo_id" name="motivo_id">
                 <div class="modal-body">
 
-                    <div class="form-group">
-                        <label for="nombre">
-                            <i class="fas fa-tag"></i> Nombre <span class="text-danger">*</span>
-                        </label>
-                        <input type="text"
-                            class="form-control"
-                            id="nombre"
-                            name="nombre"
-                            placeholder="Ej: Falla mecánica"
-                            required
-                            maxlength="150">
-                        <small class="form-text text-muted">
-                            Nombre del motivo de parada
-                        </small>
+                    <!-- SECCIÓN: Código y Nombre -->
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="codigo">
+                                    <i class="fas fa-barcode"></i> Código
+                                </label>
+                                <input type="text"
+                                    class="form-control"
+                                    id="codigo"
+                                    name="codigo"
+                                    placeholder="HP-001"
+                                    maxlength="20">
+                                <small class="form-text text-muted">
+                                    Código interno (opcional)
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label for="nombre">
+                                    <i class="fas fa-tag"></i> Nombre <span class="text-danger">*</span>
+                                </label>
+                                <input type="text"
+                                    class="form-control"
+                                    id="nombre"
+                                    name="nombre"
+                                    placeholder="Ej: Falla mecánica"
+                                    required
+                                    maxlength="150">
+                            </div>
+                        </div>
                     </div>
 
+                    <!-- SECCIÓN: Descripción -->
                     <div class="form-group">
                         <label for="descripcion">
                             <i class="fas fa-align-left"></i> Descripción
@@ -145,6 +165,7 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                             maxlength="255"></textarea>
                     </div>
 
+                    <!-- SECCIÓN: Categoría -->
                     <div class="form-group">
                         <label for="categoria_parada">
                             <i class="fas fa-layer-group"></i> Categoría <span class="text-danger">*</span>
@@ -161,6 +182,9 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                         </small>
                     </div>
 
+                    <hr>
+
+                    <!-- SECCIÓN: Orden y Frecuente -->
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
@@ -174,47 +198,77 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                                     value="999"
                                     min="1"
                                     max="9999">
+                                <small class="form-text text-muted">
+                                    Orden en dropdowns
+                                </small>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <div class="custom-control custom-switch mt-4">
-                                    <input type="checkbox" class="custom-control-input" id="es_frecuente" name="es_frecuente" value="1">
+                                <label>&nbsp;</label>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" 
+                                        class="custom-control-input" 
+                                        id="es_frecuente" 
+                                        name="es_frecuente" 
+                                        value="1">
                                     <label class="custom-control-label" for="es_frecuente">
                                         <i class="fas fa-star text-warning"></i> Es Frecuente
                                     </label>
                                 </div>
+                                <small class="form-text text-muted">
+                                    Aparece en sugerencias
+                                </small>
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="es_justificada" name="es_justificada" value="1" checked>
-                                <label class="custom-control-label" for="es_justificada">
-                                    <i class="fas fa-check-circle"></i> Es Justificada
-                                </label>
-                            </div>
-                            <small class="form-text text-muted">
-                                Parada justificada o no
-                            </small>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="requiere_observacion" name="requiere_observacion" value="1">
-                                <label class="custom-control-label" for="requiere_observacion">
-                                    <i class="fas fa-comment"></i> Requiere Observación
-                                </label>
-                            </div>
-                            <small class="form-text text-muted">
-                                Obliga escribir detalle
-                            </small>
                         </div>
                     </div>
 
                     <hr>
 
+                    <!-- SECCIÓN: Justificada y Requiere Observación -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Tipo de Parada</label>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" 
+                                        class="custom-control-input" 
+                                        id="es_justificada" 
+                                        name="es_justificada" 
+                                        value="1" 
+                                        checked>
+                                    <label class="custom-control-label" for="es_justificada">
+                                        <i class="fas fa-check-circle text-info"></i> Es Justificada
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Parada por causa válida
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Observaciones</label>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" 
+                                        class="custom-control-input" 
+                                        id="requiere_observacion" 
+                                        name="requiere_observacion" 
+                                        value="1">
+                                    <label class="custom-control-label" for="requiere_observacion">
+                                        <i class="fas fa-comment text-primary"></i> Requiere Observación
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Obliga escribir detalle
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- SECCIÓN: Estado (solo al editar) -->
                     <div class="form-group" id="grupoEstado" style="display: none;">
                         <label for="estado">
                             <i class="fas fa-toggle-on"></i> Estado
@@ -223,8 +277,12 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                             <option value="1">Activo</option>
                             <option value="0">Inactivo</option>
                         </select>
+                        <small class="form-text text-muted">
+                            Solo las activas aparecen en reportes
+                        </small>
                     </div>
 
+                    <!-- Alerta en Modal -->
                     <div id="alertModal" class="alert" style="display: none;"></div>
 
                 </div>

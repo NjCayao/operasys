@@ -235,6 +235,67 @@ elseif ($action === 'actualizar') {
 }
 
 // ============================================
+// 🆕 V3.0: ACTUALIZAR CONSUMO (Solo admin)
+// ============================================
+elseif ($action === 'actualizar_consumo') {
+    
+    if ($userRol !== 'admin') {
+        echo json_encode(['success' => false, 'message' => 'Sin permisos']);
+        exit;
+    }
+    
+    $id = $_POST['id'] ?? 0;
+    $consumo = $_POST['consumo_promedio_hr'] ?? null;
+    $capacidad = $_POST['capacidad_tanque'] ?? null;
+    
+    if (!$id || ($consumo === null && $capacidad === null)) {
+        echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+        exit;
+    }
+    
+    try {
+        // Obtener datos actuales
+        $stmt = $pdo->prepare("SELECT codigo, consumo_promedio_hr, capacidad_tanque FROM equipos WHERE id = ?");
+        $stmt->execute([$id]);
+        $equipo = $stmt->fetch();
+        
+        if (!$equipo) {
+            echo json_encode(['success' => false, 'message' => 'Equipo no encontrado']);
+            exit;
+        }
+        
+        // Actualizar solo los campos proporcionados
+        $nuevoConsumo = $consumo !== null ? $consumo : $equipo['consumo_promedio_hr'];
+        $nuevaCapacidad = $capacidad !== null ? $capacidad : $equipo['capacidad_tanque'];
+        
+        $stmt = $pdo->prepare("
+            UPDATE equipos 
+            SET consumo_promedio_hr = ?, capacidad_tanque = ?
+            WHERE id = ?
+        ");
+        
+        if ($stmt->execute([$nuevoConsumo, $nuevaCapacidad, $id])) {
+            
+            $detalle = "Consumo actualizado: {$equipo['codigo']} - {$nuevoConsumo} gal/hr, {$nuevaCapacidad} gal";
+            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
+            $stmtAudit->execute([$userId, 'actualizar_consumo_equipo', $detalle]);
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Consumo actualizado',
+                'consumo_promedio_hr' => $nuevoConsumo,
+                'capacidad_tanque' => $nuevaCapacidad
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
+        }
+        
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Error del servidor']);
+    }
+}
+
+// ============================================
 // ELIMINAR EQUIPO
 // ============================================
 elseif ($action === 'eliminar') {

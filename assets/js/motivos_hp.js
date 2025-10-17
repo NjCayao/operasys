@@ -1,6 +1,7 @@
 /**
  * OperaSys - Gestión de Motivos HP
  * Archivo: assets/js/motivos_hp.js
+ * Versión: 3.0 - CORREGIDO
  */
 
 let tablaMotivos;
@@ -79,9 +80,11 @@ function editarMotivo(id) {
             if (response.success) {
                 const mot = response.motivo;
                 
+                // CAMPO CÓDIGO INTEGRADO AQUÍ
                 $('#motivo_id').val(mot.id);
+                $('#codigo').val(mot.codigo || '');  // <-- AGREGADO
                 $('#nombre').val(mot.nombre);
-                $('#descripcion').val(mot.descripcion);
+                $('#descripcion').val(mot.descripcion || '');
                 $('#categoria_parada').val(mot.categoria_parada);
                 $('#orden_mostrar').val(mot.orden_mostrar);
                 $('#es_frecuente').prop('checked', mot.es_frecuente == 1);
@@ -106,9 +109,12 @@ function editarMotivo(id) {
 // Guardar motivo
 function guardarMotivo() {
     const motivoId = $('#motivo_id').val();
+    
+    // CAMPO CÓDIGO INTEGRADO EN EL FORMDATA
     const formData = {
         action: motivoId ? 'actualizar' : 'crear',
         id: motivoId,
+        codigo: $('#codigo').val().trim(),  // <-- AGREGADO
         nombre: $('#nombre').val().trim(),
         descripcion: $('#descripcion').val().trim(),
         categoria_parada: $('#categoria_parada').val(),

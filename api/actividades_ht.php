@@ -2,6 +2,7 @@
 /**
  * OperaSys - API de Actividades HT (Horas Trabajadas)
  * Archivo: api/actividades_ht.php
+ * Versión: 3.0 - FINAL con autoasignación de orden por ID
  */
 
 require_once '../config/database.php';
@@ -26,7 +27,7 @@ if ($action === 'listar') {
     try {
         $stmt = $pdo->query("
             SELECT 
-                id, nombre, descripcion, rendimiento_referencial,
+                id, codigo, nombre, descripcion, rendimiento_referencial,
                 es_frecuente, orden_mostrar, estado,
                 DATE_FORMAT(fecha_creacion, '%d/%m/%Y') as fecha_creacion
             FROM actividades_ht 
@@ -35,7 +36,7 @@ if ($action === 'listar') {
         
         $actividades = $stmt->fetchAll();
         
-        // Para select (solo activas y frecuentes)
+        // Para select (solo activas)
         if (isset($_GET['para_select'])) {
             $activas = array_filter($actividades, fn($a) => $a['estado'] == 1);
             echo json_encode(['success' => true, 'actividades' => array_values($activas)]);
@@ -63,6 +64,7 @@ if ($action === 'listar') {
             
             $data[] = [
                 $act['id'],
+                $act['codigo'] ?? '-',
                 $frecuenteBadge . ' ' . htmlspecialchars($act['nombre']),
                 $act['descripcion'] ?? '-',
                 $act['rendimiento_referencial'] ?? '-',
@@ -90,6 +92,7 @@ elseif ($action === 'crear') {
         exit;
     }
     
+    $codigo = trim($_POST['codigo'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
     $descripcion = trim($_POST['descripcion'] ?? '');
     $rendimiento = trim($_POST['rendimiento_referencial'] ?? '');
@@ -102,6 +105,7 @@ elseif ($action === 'crear') {
     }
     
     try {
+        // Validar nombre duplicado
         $stmt = $pdo->prepare("SELECT id FROM actividades_ht WHERE nombre = ?");
         $stmt->execute([$nombre]);
         
@@ -110,17 +114,36 @@ elseif ($action === 'crear') {
             exit;
         }
         
+        // Validar código duplicado (si se proporciona)
+        if (!empty($codigo)) {
+            $stmt = $pdo->prepare("SELECT id FROM actividades_ht WHERE codigo = ?");
+            $stmt->execute([$codigo]);
+            
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'Ya existe ese código']);
+                exit;
+            }
+        }
+        
         $stmt = $pdo->prepare("
-            INSERT INTO actividades_ht (nombre, descripcion, rendimiento_referencial, es_frecuente, orden_mostrar) 
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO actividades_ht (codigo, nombre, descripcion, rendimiento_referencial, es_frecuente, orden_mostrar) 
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
         
-        if ($stmt->execute([$nombre, $descripcion, $rendimiento, $esFrecuente, $orden])) {
+        if ($stmt->execute([$codigo, $nombre, $descripcion, $rendimiento, $esFrecuente, $orden])) {
+            
+            $nuevo_id = $pdo->lastInsertId();
+            
+            // 🎯 AUTOASIGNAR ORDEN POR ID si dejó el valor por defecto (999)
+            if ($orden == 999) {
+                $stmtOrden = $pdo->prepare("UPDATE actividades_ht SET orden_mostrar = ? WHERE id = ?");
+                $stmtOrden->execute([$nuevo_id, $nuevo_id]);
+            }
             
             $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
             $stmtAudit->execute([$userId, 'crear_actividad_ht', "Actividad HT creada: $nombre"]);
             
-            echo json_encode(['success' => true, 'message' => 'Actividad creada', 'id' => $pdo->lastInsertId()]);
+            echo json_encode(['success' => true, 'message' => 'Actividad creada', 'id' => $nuevo_id]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al crear']);
         }
@@ -141,6 +164,7 @@ elseif ($action === 'actualizar') {
     }
     
     $id = $_POST['id'] ?? 0;
+    $codigo = trim($_POST['codigo'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
     $descripcion = trim($_POST['descripcion'] ?? '');
     $rendimiento = trim($_POST['rendimiento_referencial'] ?? '');
@@ -154,6 +178,7 @@ elseif ($action === 'actualizar') {
     }
     
     try {
+        // Validar nombre duplicado
         $stmt = $pdo->prepare("SELECT id FROM actividades_ht WHERE nombre = ? AND id != ?");
         $stmt->execute([$nombre, $id]);
         
@@ -162,14 +187,25 @@ elseif ($action === 'actualizar') {
             exit;
         }
         
+        // Validar código duplicado (si se proporciona)
+        if (!empty($codigo)) {
+            $stmt = $pdo->prepare("SELECT id FROM actividades_ht WHERE codigo = ? AND id != ?");
+            $stmt->execute([$codigo, $id]);
+            
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'Ya existe otro registro con ese código']);
+                exit;
+            }
+        }
+        
         $stmt = $pdo->prepare("
             UPDATE actividades_ht 
-            SET nombre = ?, descripcion = ?, rendimiento_referencial = ?, 
+            SET codigo = ?, nombre = ?, descripcion = ?, rendimiento_referencial = ?, 
                 es_frecuente = ?, orden_mostrar = ?, estado = ?
             WHERE id = ?
         ");
         
-        if ($stmt->execute([$nombre, $descripcion, $rendimiento, $esFrecuente, $orden, $estado, $id])) {
+        if ($stmt->execute([$codigo, $nombre, $descripcion, $rendimiento, $esFrecuente, $orden, $estado, $id])) {
             
             $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
             $stmtAudit->execute([$userId, 'editar_actividad_ht', "Actividad HT actualizada: $nombre"]);

@@ -1,11 +1,12 @@
 /**
  * OperaSys - IndexedDB Manager
  * Archivo: assets/js/indexeddb.js
+ * Versión: 3.0 - Actualizado para HT/HP (SIN partidas)
  * Descripción: Gestiona almacenamiento local para funcionamiento offline
  */
 
 const DB_NAME = 'OperaSysDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3; // Incrementado para V3.0
 
 let db = null;
 
@@ -29,7 +30,7 @@ function inicializarDB() {
 
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
-            console.log('[IndexedDB] Actualizando estructura...');
+            console.log('[IndexedDB] Actualizando estructura a V3.0...');
 
             // Store: Usuarios (Operadores)
             if (!db.objectStoreNames.contains('usuarios')) {
@@ -47,18 +48,37 @@ function inicializarDB() {
                 console.log('[IndexedDB] ✓ Store "equipos" creado');
             }
 
-            // Store: Fases de Costo
-            if (!db.objectStoreNames.contains('fases_costo')) {
-                const fasesStore = db.createObjectStore('fases_costo', { keyPath: 'id' });
-                fasesStore.createIndex('estado', 'estado', { unique: false });
-                console.log('[IndexedDB] ✓ Store "fases_costo" creado');
+            // ❌ V3.0: Eliminar stores antiguos
+            if (db.objectStoreNames.contains('fases_costo')) {
+                db.deleteObjectStore('fases_costo');
+                console.log('[IndexedDB] ✓ Store antiguo "fases_costo" eliminado');
             }
 
-            // Store: Tipos de Trabajo
-            if (!db.objectStoreNames.contains('tipos_trabajo')) {
-                const tiposStore = db.createObjectStore('tipos_trabajo', { keyPath: 'id' });
-                tiposStore.createIndex('estado', 'estado', { unique: false });
-                console.log('[IndexedDB] ✓ Store "tipos_trabajo" creado');
+            if (db.objectStoreNames.contains('partidas')) {
+                db.deleteObjectStore('partidas');
+                console.log('[IndexedDB] ✓ Store antiguo "partidas" eliminado');
+            }
+
+            if (db.objectStoreNames.contains('tipos_trabajo')) {
+                db.deleteObjectStore('tipos_trabajo');
+                console.log('[IndexedDB] ✓ Store antiguo "tipos_trabajo" eliminado');
+            }
+
+            // 🆕 V3.0: Actividades HT
+            if (!db.objectStoreNames.contains('actividades_ht')) {
+                const actividadesStore = db.createObjectStore('actividades_ht', { keyPath: 'id' });
+                actividadesStore.createIndex('estado', 'estado', { unique: false });
+                actividadesStore.createIndex('es_frecuente', 'es_frecuente', { unique: false });
+                console.log('[IndexedDB] ✓ Store "actividades_ht" creado');
+            }
+
+            // 🆕 V3.0: Motivos HP
+            if (!db.objectStoreNames.contains('motivos_hp')) {
+                const motivosStore = db.createObjectStore('motivos_hp', { keyPath: 'id' });
+                motivosStore.createIndex('estado', 'estado', { unique: false });
+                motivosStore.createIndex('es_frecuente', 'es_frecuente', { unique: false });
+                motivosStore.createIndex('categoria_parada', 'categoria_parada', { unique: false });
+                console.log('[IndexedDB] ✓ Store "motivos_hp" creado');
             }
 
             // Store: Reportes Pendientes (offline)
@@ -181,14 +201,14 @@ function limpiarStore(storeName) {
 }
 
 // ============================================
-// SINCRONIZACIÓN DE CATÁLOGOS
+// SINCRONIZACIÓN DE CATÁLOGOS V3.0
 // ============================================
 
 /**
  * Sincronizar todos los catálogos desde el servidor
  */
 async function sincronizarCatalogos() {
-    console.log('[IndexedDB] Iniciando sincronización de catálogos...');
+    console.log('[IndexedDB] Iniciando sincronización de catálogos V3.0...');
 
     try {
         // Sincronizar usuarios (operadores)
@@ -197,11 +217,11 @@ async function sincronizarCatalogos() {
         // Sincronizar equipos
         await sincronizarEquipos();
         
-        // Sincronizar fases de costo
-        await sincronizarFasesCosto();
+        // 🆕 V3.0: Sincronizar actividades HT
+        await sincronizarActividadesHT();
         
-        // Sincronizar tipos de trabajo
-        await sincronizarTiposTrabajo();
+        // 🆕 V3.0: Sincronizar motivos HP
+        await sincronizarMotivosHP();
 
         // Guardar fecha de última sincronización
         await guardarEnStore('metadata', {
@@ -209,7 +229,7 @@ async function sincronizarCatalogos() {
             valor: new Date().toISOString()
         });
 
-        console.log('[IndexedDB] ✓ Sincronización completada');
+        console.log('[IndexedDB] ✓ Sincronización V3.0 completada');
         return true;
     } catch (error) {
         console.error('[IndexedDB] Error en sincronización:', error);
@@ -264,56 +284,51 @@ async function sincronizarEquipos() {
 }
 
 /**
- * Sincronizar fases de costo desde la API
+ * 🆕 V3.0: Sincronizar actividades HT
  */
-async function sincronizarFasesCosto() {
+async function sincronizarActividadesHT() {
     try {
-        const response = await fetch('../../api/fases_costo.php?action=listar&para_select=1');
+        const response = await fetch('../../api/actividades_ht.php?action=listar&para_select=1');
         const data = await response.json();
 
         if (data.success) {
-            await limpiarStore('fases_costo');
+            await limpiarStore('actividades_ht');
             
-            const fases = data.fases || data.data || [];
+            const actividades = data.actividades || [];
             
-            for (const fase of fases) {
-                await guardarEnStore('fases_costo', fase);
+            for (const actividad of actividades) {
+                await guardarEnStore('actividades_ht', actividad);
             }
             
-            console.log('[IndexedDB] ✓ Fases de costo sincronizadas:', fases.length);
+            console.log('[IndexedDB] ✓ Actividades HT sincronizadas:', actividades.length);
         }
     } catch (error) {
-        console.error('[IndexedDB] Error al sincronizar fases:', error);
+        console.error('[IndexedDB] Error al sincronizar actividades HT:', error);
         throw error;
     }
 }
 
 /**
- * Sincronizar tipos de trabajo desde la API
+ * 🆕 V3.0: Sincronizar motivos HP
  */
-async function sincronizarTiposTrabajo() {
+async function sincronizarMotivosHP() {
     try {
-        const response = await fetch('../../api/tipos_trabajo.php?action=listar');
+        const response = await fetch('../../api/motivos_hp.php?action=listar&para_select=1');
         const data = await response.json();
 
         if (data.success) {
-            await limpiarStore('tipos_trabajo');
+            await limpiarStore('motivos_hp');
             
-            // La API devuelve array de arrays para DataTables, extraer datos
-            for (const row of data.data) {
-                const tipo = {
-                    id: row[0],
-                    nombre: row[1],
-                    descripcion: row[2],
-                    estado: row[3].includes('Activo') ? 1 : 0
-                };
-                await guardarEnStore('tipos_trabajo', tipo);
+            const motivos = data.motivos || [];
+            
+            for (const motivo of motivos) {
+                await guardarEnStore('motivos_hp', motivo);
             }
             
-            console.log('[IndexedDB] ✓ Tipos de trabajo sincronizados:', data.data.length);
+            console.log('[IndexedDB] ✓ Motivos HP sincronizados:', motivos.length);
         }
     } catch (error) {
-        console.error('[IndexedDB] Error al sincronizar tipos de trabajo:', error);
+        console.error('[IndexedDB] Error al sincronizar motivos HP:', error);
         throw error;
     }
 }
@@ -457,4 +472,4 @@ window.IndexedDBManager = {
     eliminar: eliminarDeStore
 };
 
-console.log('[IndexedDB] ✓ Módulo cargado');
+console.log('[IndexedDB] ✓ Módulo V3.0 cargado (SIN partidas)')

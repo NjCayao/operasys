@@ -1,6 +1,7 @@
 /**
  * OperaSys - Gestión de Actividades HT
  * Archivo: assets/js/actividades_ht.js
+ * Versión: 3.0
  */
 
 let tablaActividades;
@@ -78,6 +79,7 @@ function editarActividad(id) {
                 const act = response.actividad;
                 
                 $('#actividad_id').val(act.id);
+                $('#codigo').val(act.codigo);
                 $('#nombre').val(act.nombre);
                 $('#descripcion').val(act.descripcion);
                 $('#rendimiento_referencial').val(act.rendimiento_referencial);
@@ -105,6 +107,7 @@ function guardarActividad() {
     const formData = {
         action: actividadId ? 'actualizar' : 'crear',
         id: actividadId,
+        codigo: $('#codigo').val().trim(),
         nombre: $('#nombre').val().trim(),
         descripcion: $('#descripcion').val().trim(),
         rendimiento_referencial: $('#rendimiento_referencial').val().trim(),

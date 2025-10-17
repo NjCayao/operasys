@@ -2,7 +2,7 @@
 /**
  * OperaSys - API de Reportes V3.0
  * Archivo: api/reportes.php
- * Sistema HT/HP con horómetros y combustible
+ * Sistema HT/HP con horómetros y combustible (SIN partidas)
  */
 
 require_once '../config/database.php';
@@ -30,6 +30,11 @@ if ($action === 'crear') {
 
     if (!$equipoId) {
         echo json_encode(['success' => false, 'message' => 'Seleccione un equipo']);
+        exit;
+    }
+    
+    if ($horometroInicial <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Horómetro inicial es obligatorio']);
         exit;
     }
 
@@ -101,6 +106,13 @@ elseif ($action === 'actualizar_horometro') {
             exit;
         }
         
+        $horasMotor = $horometroFinal - $reporte['horometro_inicial'];
+        
+        if ($horasMotor > 24) {
+            echo json_encode(['success' => false, 'message' => 'Las horas motor no pueden superar 24 horas']);
+            exit;
+        }
+        
         if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
             echo json_encode(['success' => false, 'message' => 'Sin permisos']);
             exit;
@@ -109,13 +121,10 @@ elseif ($action === 'actualizar_horometro') {
         $stmt = $pdo->prepare("UPDATE reportes SET horometro_final = ? WHERE id = ?");
         
         if ($stmt->execute([$horometroFinal, $reporteId])) {
-            // Calcular horas motor
-            $horasMotor = $horometroFinal - $reporte['horometro_inicial'];
-            
             echo json_encode([
                 'success' => true, 
                 'message' => 'Horómetro actualizado',
-                'horas_motor' => $horasMotor
+                'horas_motor' => round($horasMotor, 2)
             ]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
@@ -148,8 +157,13 @@ elseif ($action === 'agregar_combustible') {
     }
 
     try {
-        // Verificar permisos
-        $stmt = $pdo->prepare("SELECT usuario_id, estado FROM reportes WHERE id = ?");
+        // Verificar permisos y obtener capacidad tanque
+        $stmt = $pdo->prepare("
+            SELECT r.usuario_id, r.estado, r.horometro_inicial, r.horometro_final, e.capacidad_tanque
+            FROM reportes r
+            INNER JOIN equipos e ON r.equipo_id = e.id
+            WHERE r.id = ?
+        ");
         $stmt->execute([$reporteId]);
         $reporte = $stmt->fetch();
 
@@ -165,6 +179,18 @@ elseif ($action === 'agregar_combustible') {
 
         if ($reporte['usuario_id'] != $userId && $userRol !== 'admin') {
             echo json_encode(['success' => false, 'message' => 'Sin permisos']);
+            exit;
+        }
+        
+        // Validar horómetro dentro del rango
+        if ($horometro < $reporte['horometro_inicial'] || ($reporte['horometro_final'] > 0 && $horometro > $reporte['horometro_final'])) {
+            echo json_encode(['success' => false, 'message' => 'Horómetro fuera del rango del reporte']);
+            exit;
+        }
+        
+        // Validar que no exceda capacidad del tanque
+        if ($galones > $reporte['capacidad_tanque']) {
+            echo json_encode(['success' => false, 'message' => 'Galones excede capacidad del tanque (' . $reporte['capacidad_tanque'] . ' gal)']);
             exit;
         }
 

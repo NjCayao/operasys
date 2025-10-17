@@ -2,6 +2,7 @@
 /**
  * OperaSys - API de Motivos HP (Horas Paradas)
  * Archivo: api/motivos_hp.php
+ * Versión: 3.0 - FINAL con autoasignación de orden por ID
  */
 
 require_once '../config/database.php';
@@ -26,7 +27,7 @@ if ($action === 'listar') {
     try {
         $stmt = $pdo->query("
             SELECT 
-                id, nombre, descripcion, categoria_parada,
+                id, codigo, nombre, descripcion, categoria_parada,
                 es_justificada, requiere_observacion, es_frecuente, 
                 orden_mostrar, estado,
                 DATE_FORMAT(fecha_creacion, '%d/%m/%Y') as fecha_creacion
@@ -76,6 +77,7 @@ if ($action === 'listar') {
             
             $data[] = [
                 $mot['id'],
+                $mot['codigo'] ?? '-',
                 $frecuenteBadge . ' ' . htmlspecialchars($mot['nombre']),
                 $categoriaBadge,
                 $justificadaBadge,
@@ -103,6 +105,7 @@ elseif ($action === 'crear') {
         exit;
     }
     
+    $codigo = trim($_POST['codigo'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
     $descripcion = trim($_POST['descripcion'] ?? '');
     $categoria = $_POST['categoria_parada'] ?? 'operacional';
@@ -117,6 +120,7 @@ elseif ($action === 'crear') {
     }
     
     try {
+        // Validar nombre duplicado
         $stmt = $pdo->prepare("SELECT id FROM motivos_hp WHERE nombre = ?");
         $stmt->execute([$nombre]);
         
@@ -125,18 +129,37 @@ elseif ($action === 'crear') {
             exit;
         }
         
+        // Validar código duplicado (si se proporciona)
+        if (!empty($codigo)) {
+            $stmt = $pdo->prepare("SELECT id FROM motivos_hp WHERE codigo = ?");
+            $stmt->execute([$codigo]);
+            
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'Ya existe ese código']);
+                exit;
+            }
+        }
+        
         $stmt = $pdo->prepare("
             INSERT INTO motivos_hp 
-            (nombre, descripcion, categoria_parada, es_justificada, requiere_observacion, es_frecuente, orden_mostrar) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (codigo, nombre, descripcion, categoria_parada, es_justificada, requiere_observacion, es_frecuente, orden_mostrar) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
-        if ($stmt->execute([$nombre, $descripcion, $categoria, $esJustificada, $requiereObs, $esFrecuente, $orden])) {
+        if ($stmt->execute([$codigo, $nombre, $descripcion, $categoria, $esJustificada, $requiereObs, $esFrecuente, $orden])) {
+            
+            $nuevo_id = $pdo->lastInsertId();
+            
+            // 🎯 AUTOASIGNAR ORDEN POR ID si dejó el valor por defecto (999)
+            if ($orden == 999) {
+                $stmtOrden = $pdo->prepare("UPDATE motivos_hp SET orden_mostrar = ? WHERE id = ?");
+                $stmtOrden->execute([$nuevo_id, $nuevo_id]);
+            }
             
             $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
             $stmtAudit->execute([$userId, 'crear_motivo_hp', "Motivo HP creado: $nombre"]);
             
-            echo json_encode(['success' => true, 'message' => 'Motivo creado', 'id' => $pdo->lastInsertId()]);
+            echo json_encode(['success' => true, 'message' => 'Motivo creado', 'id' => $nuevo_id]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al crear']);
         }
@@ -157,6 +180,7 @@ elseif ($action === 'actualizar') {
     }
     
     $id = $_POST['id'] ?? 0;
+    $codigo = trim($_POST['codigo'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
     $descripcion = trim($_POST['descripcion'] ?? '');
     $categoria = $_POST['categoria_parada'] ?? 'operacional';
@@ -172,6 +196,7 @@ elseif ($action === 'actualizar') {
     }
     
     try {
+        // Validar nombre duplicado
         $stmt = $pdo->prepare("SELECT id FROM motivos_hp WHERE nombre = ? AND id != ?");
         $stmt->execute([$nombre, $id]);
         
@@ -180,14 +205,25 @@ elseif ($action === 'actualizar') {
             exit;
         }
         
+        // Validar código duplicado (si se proporciona)
+        if (!empty($codigo)) {
+            $stmt = $pdo->prepare("SELECT id FROM motivos_hp WHERE codigo = ? AND id != ?");
+            $stmt->execute([$codigo, $id]);
+            
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'Ya existe otro registro con ese código']);
+                exit;
+            }
+        }
+        
         $stmt = $pdo->prepare("
             UPDATE motivos_hp 
-            SET nombre = ?, descripcion = ?, categoria_parada = ?, es_justificada = ?, 
+            SET codigo = ?, nombre = ?, descripcion = ?, categoria_parada = ?, es_justificada = ?, 
                 requiere_observacion = ?, es_frecuente = ?, orden_mostrar = ?, estado = ?
             WHERE id = ?
         ");
         
-        if ($stmt->execute([$nombre, $descripcion, $categoria, $esJustificada, $requiereObs, $esFrecuente, $orden, $estado, $id])) {
+        if ($stmt->execute([$codigo, $nombre, $descripcion, $categoria, $esJustificada, $requiereObs, $esFrecuente, $orden, $estado, $id])) {
             
             $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
             $stmtAudit->execute([$userId, 'editar_motivo_hp', "Motivo HP actualizado: $nombre"]);
@@ -220,16 +256,19 @@ elseif ($action === 'eliminar') {
     }
     
     try {
+        // Verificar si tiene reportes asociados
         $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM reportes_detalle WHERE motivo_hp_id = ?");
         $stmt->execute([$id]);
         $result = $stmt->fetch();
         
         if ($result['total'] > 0) {
+            // Solo desactivar
             $stmt = $pdo->prepare("UPDATE motivos_hp SET estado = 0 WHERE id = ?");
             $stmt->execute([$id]);
             
             echo json_encode(['success' => true, 'message' => 'Motivo desactivado (tiene reportes asociados)']);
         } else {
+            // Eliminar permanentemente
             $stmt = $pdo->prepare("DELETE FROM motivos_hp WHERE id = ?");
             $stmt->execute([$id]);
             

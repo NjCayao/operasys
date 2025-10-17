@@ -2,6 +2,7 @@
 /**
  * OperaSys - Gestión de Actividades HT
  * Archivo: modules/admin/actividades_ht.php
+ * Versión: 3.0
  */
 
 require_once '../../config/config.php';
@@ -117,20 +118,37 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                 <input type="hidden" id="actividad_id">
                 <div class="modal-body">
 
-                    <div class="form-group">
-                        <label for="nombre">
-                            <i class="fas fa-tag"></i> Nombre <span class="text-danger">*</span>
-                        </label>
-                        <input type="text"
-                            class="form-control"
-                            id="nombre"
-                            name="nombre"
-                            placeholder="Ej: Excavación de plataforma"
-                            required
-                            maxlength="150">
-                        <small class="form-text text-muted">
-                            Nombre descriptivo de la actividad productiva
-                        </small>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="codigo">
+                                    <i class="fas fa-barcode"></i> Código
+                                </label>
+                                <input type="text"
+                                    class="form-control"
+                                    id="codigo"
+                                    name="codigo"
+                                    placeholder="HT-001"
+                                    maxlength="20">
+                                <small class="form-text text-muted">
+                                    Código interno (opcional)
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label for="nombre">
+                                    <i class="fas fa-tag"></i> Nombre <span class="text-danger">*</span>
+                                </label>
+                                <input type="text"
+                                    class="form-control"
+                                    id="nombre"
+                                    name="nombre"
+                                    placeholder="Ej: Excavación de plataforma"
+                                    required
+                                    maxlength="150">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group">
