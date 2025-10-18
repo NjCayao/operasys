@@ -1,8 +1,8 @@
 <?php
 /**
- * OperaSys - API de Equipos V3.0
+ * OperaSys - API de Equipos V3.1
  * Archivo: api/equipos.php
- * Incluye: consumo_promedio_hr y capacidad_tanque
+ * Incluye: consumo_promedio_hr, capacidad_tanque y CONTRATAS
  */
 
 require_once '../config/database.php';
@@ -39,30 +39,48 @@ if ($action === 'obtener_equipos_operador') {
         // Admin/Supervisor → Todos
         if ($userRol === 'admin' || $userRol === 'supervisor') {
             $stmt = $pdo->query("
-                SELECT id, categoria, codigo, descripcion, consumo_promedio_hr, capacidad_tanque
-                FROM equipos 
-                WHERE estado = 1 
-                ORDER BY categoria, codigo
+                SELECT 
+                    e.id, e.codigo, e.descripcion,
+                    e.contrata_id, e.tipo_tarifa, e.tarifa_alquiler,
+                    c.razon_social as nombre_contrata,
+                    cat.nombre as categoria
+                FROM equipos e
+                LEFT JOIN contratas c ON e.contrata_id = c.id
+                LEFT JOIN categorias_equipos cat ON e.categoria_id = cat.id
+                WHERE e.estado = 1 
+                ORDER BY cat.nombre, e.codigo
             ");
         } 
         // Operador → Solo su categoría
         elseif (strpos($cargo, 'Operador de ') === 0) {
-            $categoria = str_replace('Operador de ', '', $cargo);
+            $categoriaNombre = str_replace('Operador de ', '', $cargo);
             
             $stmt = $pdo->prepare("
-                SELECT id, categoria, codigo, descripcion, consumo_promedio_hr, capacidad_tanque
-                FROM equipos 
-                WHERE categoria = ? AND estado = 1 
-                ORDER BY codigo
+                SELECT 
+                    e.id, e.codigo, e.descripcion,
+                    e.contrata_id, e.tipo_tarifa, e.tarifa_alquiler,
+                    c.razon_social as nombre_contrata,
+                    cat.nombre as categoria
+                FROM equipos e
+                LEFT JOIN contratas c ON e.contrata_id = c.id
+                LEFT JOIN categorias_equipos cat ON e.categoria_id = cat.id
+                WHERE cat.nombre = ? AND e.estado = 1 
+                ORDER BY e.codigo
             ");
-            $stmt->execute([$categoria]);
+            $stmt->execute([$categoriaNombre]);
         } 
         else {
             $stmt = $pdo->query("
-                SELECT id, categoria, codigo, descripcion, consumo_promedio_hr, capacidad_tanque
-                FROM equipos 
-                WHERE estado = 1 
-                ORDER BY categoria, codigo
+                SELECT 
+                    e.id, e.codigo, e.descripcion,
+                    e.contrata_id, e.tipo_tarifa, e.tarifa_alquiler,
+                    c.razon_social as nombre_contrata,
+                    cat.nombre as categoria
+                FROM equipos e
+                LEFT JOIN contratas c ON e.contrata_id = c.id
+                LEFT JOIN categorias_equipos cat ON e.categoria_id = cat.id
+                WHERE e.estado = 1 
+                ORDER BY cat.nombre, e.codigo
             ");
         }
         
@@ -71,7 +89,7 @@ if ($action === 'obtener_equipos_operador') {
         echo json_encode([
             'success' => true,
             'equipos' => $equipos,
-            'categoria_operador' => $categoria ?? 'Todos'
+            'categoria_operador' => $categoriaNombre ?? 'Todos'
         ]);
         
     } catch (PDOException $e) {
@@ -80,18 +98,25 @@ if ($action === 'obtener_equipos_operador') {
 }
 
 // ============================================
-// LISTAR TODOS (ADMIN)
+// LISTAR TODOS (ADMIN) - CON CONTRATAS
 // ============================================
 elseif ($action === 'listar') {
     
     try {
         $stmt = $pdo->query("
             SELECT 
-                id, categoria, codigo, descripcion,
-                consumo_promedio_hr, capacidad_tanque, estado,
-                DATE_FORMAT(fecha_creacion, '%d/%m/%Y') as fecha_creacion
-            FROM equipos 
-            ORDER BY categoria, codigo
+                e.id, e.codigo, e.descripcion,
+                e.contrata_id, e.tipo_tarifa, e.tarifa_alquiler,
+                e.estado,
+                DATE_FORMAT(e.fecha_creacion, '%d/%m/%Y') as fecha_creacion,
+                c.razon_social as nombre_contrata,
+                cat.nombre as categoria,
+                cat.consumo_default,
+                cat.capacidad_default
+            FROM equipos e
+            LEFT JOIN contratas c ON e.contrata_id = c.id
+            LEFT JOIN categorias_equipos cat ON e.categoria_id = cat.id
+            ORDER BY cat.nombre, e.codigo
         ");
         
         $equipos = $stmt->fetchAll();
@@ -101,6 +126,23 @@ elseif ($action === 'listar') {
             $estadoBadge = $equipo['estado'] == 1 
                 ? '<span class="badge badge-success">Activo</span>' 
                 : '<span class="badge badge-danger">Inactivo</span>';
+            
+            // Badge de propiedad
+            if ($equipo['contrata_id']) {
+                $nombreContrata = htmlspecialchars($equipo['nombre_contrata'] ?? 'Contrata sin nombre');
+                $propietarioBadge = '<span class="badge badge-warning">
+                    <i class="fas fa-handshake"></i> Alquilado</span><br>
+                    <small class="text-muted">' . $nombreContrata . '</small>';
+            } else {
+                $propietarioBadge = '<span class="badge badge-primary">
+                    <i class="fas fa-building"></i> Propio</span>';
+            }
+            
+            // Tarifa
+            $tarifa = '-';
+            if ($equipo['tarifa_alquiler']) {
+                $tarifa = 'S/ ' . number_format($equipo['tarifa_alquiler'], 2) . '/' . $equipo['tipo_tarifa'];
+            }
             
             $acciones = '';
             if ($userRol === 'admin') {
@@ -112,11 +154,13 @@ elseif ($action === 'listar') {
             
             $data[] = [
                 $equipo['id'],
-                '<strong>' . htmlspecialchars($equipo['categoria']) . '</strong>',
-                htmlspecialchars($equipo['codigo']),
-                $equipo['descripcion'] ?? '-',
-                number_format($equipo['consumo_promedio_hr'], 1) . ' gal/hr',
-                number_format($equipo['capacidad_tanque'], 0) . ' gal',
+                '<strong>' . htmlspecialchars($equipo['categoria'] ?? 'Sin categoría') . '</strong>',
+                htmlspecialchars($equipo['codigo'] ?? ''),
+                htmlspecialchars($equipo['descripcion'] ?? '-'),
+                $propietarioBadge,
+                $tarifa,
+                number_format($equipo['consumo_default'] ?? 0, 1) . ' gal/hr',
+                number_format($equipo['capacidad_default'] ?? 0, 0) . ' gal',
                 $estadoBadge,
                 $equipo['fecha_creacion'],
                 $acciones
@@ -131,7 +175,7 @@ elseif ($action === 'listar') {
 }
 
 // ============================================
-// CREAR EQUIPO
+// CREAR EQUIPO - CON CONTRATAS
 // ============================================
 elseif ($action === 'crear') {
     
@@ -140,13 +184,17 @@ elseif ($action === 'crear') {
         exit;
     }
     
-    $categoria = trim($_POST['categoria'] ?? '');
+    $categoria_id = $_POST['categoria_id'] ?? 0;
     $codigo = strtoupper(trim($_POST['codigo'] ?? ''));
     $descripcion = trim($_POST['descripcion'] ?? '');
-    $consumo = $_POST['consumo_promedio_hr'] ?? 5.0;
-    $capacidad = $_POST['capacidad_tanque'] ?? 100;
     
-    if (empty($categoria) || empty($codigo)) {
+    // Nuevos campos de contrata
+    $contrata_id = !empty($_POST['contrata_id']) ? $_POST['contrata_id'] : null;
+    $tipo_tarifa = $_POST['tipo_tarifa'] ?? 'hora';
+    $tarifa_alquiler = !empty($_POST['tarifa_alquiler']) ? $_POST['tarifa_alquiler'] : null;
+    $observaciones_contrata = trim($_POST['observaciones_contrata'] ?? '');
+    
+    if (empty($categoria_id) || empty($codigo)) {
         echo json_encode(['success' => false, 'message' => 'Categoría y código son obligatorios']);
         exit;
     }
@@ -161,14 +209,21 @@ elseif ($action === 'crear') {
         }
         
         $stmt = $pdo->prepare("
-            INSERT INTO equipos (categoria, codigo, descripcion, consumo_promedio_hr, capacidad_tanque) 
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO equipos (
+                categoria_id, codigo, descripcion,
+                contrata_id, tipo_tarifa, tarifa_alquiler, observaciones_contrata
+            ) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
         
-        if ($stmt->execute([$categoria, $codigo, $descripcion, $consumo, $capacidad])) {
+        if ($stmt->execute([
+            $categoria_id, $codigo, $descripcion,
+            $contrata_id, $tipo_tarifa, $tarifa_alquiler, $observaciones_contrata
+        ])) {
             
+            $propietario = $contrata_id ? "Contrata ID: $contrata_id" : "Equipo propio";
             $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
-            $stmtAudit->execute([$userId, 'crear_equipo', "Equipo creado: $codigo"]);
+            $stmtAudit->execute([$userId, 'crear_equipo', "Equipo creado: $codigo ($propietario)"]);
             
             echo json_encode(['success' => true, 'message' => 'Equipo creado', 'id' => $pdo->lastInsertId()]);
         } else {
@@ -181,7 +236,7 @@ elseif ($action === 'crear') {
 }
 
 // ============================================
-// ACTUALIZAR EQUIPO
+// ACTUALIZAR EQUIPO - CON CONTRATAS
 // ============================================
 elseif ($action === 'actualizar') {
     
@@ -191,14 +246,18 @@ elseif ($action === 'actualizar') {
     }
     
     $id = $_POST['id'] ?? 0;
-    $categoria = trim($_POST['categoria'] ?? '');
+    $categoria_id = $_POST['categoria_id'] ?? 0;
     $codigo = strtoupper(trim($_POST['codigo'] ?? ''));
     $descripcion = trim($_POST['descripcion'] ?? '');
-    $consumo = $_POST['consumo_promedio_hr'] ?? 5.0;
-    $capacidad = $_POST['capacidad_tanque'] ?? 100;
     $estado = $_POST['estado'] ?? 1;
     
-    if (!$id || empty($categoria) || empty($codigo)) {
+    // Campos de contrata
+    $contrata_id = !empty($_POST['contrata_id']) ? $_POST['contrata_id'] : null;
+    $tipo_tarifa = $_POST['tipo_tarifa'] ?? 'hora';
+    $tarifa_alquiler = !empty($_POST['tarifa_alquiler']) ? $_POST['tarifa_alquiler'] : null;
+    $observaciones_contrata = trim($_POST['observaciones_contrata'] ?? '');
+    
+    if (!$id || empty($categoria_id) || empty($codigo)) {
         echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
         exit;
     }
@@ -214,78 +273,21 @@ elseif ($action === 'actualizar') {
         
         $stmt = $pdo->prepare("
             UPDATE equipos 
-            SET categoria = ?, codigo = ?, descripcion = ?, 
-                consumo_promedio_hr = ?, capacidad_tanque = ?, estado = ?
+            SET categoria_id = ?, codigo = ?, descripcion = ?, estado = ?,
+                contrata_id = ?, tipo_tarifa = ?, tarifa_alquiler = ?, observaciones_contrata = ?
             WHERE id = ?
         ");
         
-        if ($stmt->execute([$categoria, $codigo, $descripcion, $consumo, $capacidad, $estado, $id])) {
+        if ($stmt->execute([
+            $categoria_id, $codigo, $descripcion, $estado,
+            $contrata_id, $tipo_tarifa, $tarifa_alquiler, $observaciones_contrata,
+            $id
+        ])) {
             
             $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
             $stmtAudit->execute([$userId, 'editar_equipo', "Equipo actualizado: $codigo"]);
             
             echo json_encode(['success' => true, 'message' => 'Equipo actualizado']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
-        }
-        
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Error del servidor']);
-    }
-}
-
-// ============================================
-// 🆕 V3.0: ACTUALIZAR CONSUMO (Solo admin)
-// ============================================
-elseif ($action === 'actualizar_consumo') {
-    
-    if ($userRol !== 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Sin permisos']);
-        exit;
-    }
-    
-    $id = $_POST['id'] ?? 0;
-    $consumo = $_POST['consumo_promedio_hr'] ?? null;
-    $capacidad = $_POST['capacidad_tanque'] ?? null;
-    
-    if (!$id || ($consumo === null && $capacidad === null)) {
-        echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
-        exit;
-    }
-    
-    try {
-        // Obtener datos actuales
-        $stmt = $pdo->prepare("SELECT codigo, consumo_promedio_hr, capacidad_tanque FROM equipos WHERE id = ?");
-        $stmt->execute([$id]);
-        $equipo = $stmt->fetch();
-        
-        if (!$equipo) {
-            echo json_encode(['success' => false, 'message' => 'Equipo no encontrado']);
-            exit;
-        }
-        
-        // Actualizar solo los campos proporcionados
-        $nuevoConsumo = $consumo !== null ? $consumo : $equipo['consumo_promedio_hr'];
-        $nuevaCapacidad = $capacidad !== null ? $capacidad : $equipo['capacidad_tanque'];
-        
-        $stmt = $pdo->prepare("
-            UPDATE equipos 
-            SET consumo_promedio_hr = ?, capacidad_tanque = ?
-            WHERE id = ?
-        ");
-        
-        if ($stmt->execute([$nuevoConsumo, $nuevaCapacidad, $id])) {
-            
-            $detalle = "Consumo actualizado: {$equipo['codigo']} - {$nuevoConsumo} gal/hr, {$nuevaCapacidad} gal";
-            $stmtAudit = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, detalle) VALUES (?, ?, ?)");
-            $stmtAudit->execute([$userId, 'actualizar_consumo_equipo', $detalle]);
-            
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Consumo actualizado',
-                'consumo_promedio_hr' => $nuevoConsumo,
-                'capacidad_tanque' => $nuevaCapacidad
-            ]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error al actualizar']);
         }
@@ -350,7 +352,13 @@ elseif ($action === 'obtener') {
     }
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM equipos WHERE id = ?");
+        $stmt = $pdo->prepare("
+            SELECT e.*, c.razon_social as nombre_contrata, cat.nombre as categoria
+            FROM equipos e
+            LEFT JOIN contratas c ON e.contrata_id = c.id
+            LEFT JOIN categorias_equipos cat ON e.categoria_id = cat.id
+            WHERE e.id = ?
+        ");
         $stmt->execute([$id]);
         $equipo = $stmt->fetch();
         
@@ -372,10 +380,10 @@ elseif ($action === 'obtener_categorias') {
     
     try {
         $stmt = $pdo->query("
-            SELECT DISTINCT categoria 
-            FROM equipos 
-            WHERE estado = 1 
-            ORDER BY categoria ASC
+            SELECT DISTINCT cat.nombre as categoria
+            FROM categorias_equipos cat
+            WHERE cat.estado = 1 
+            ORDER BY cat.nombre ASC
         ");
         
         $categorias = $stmt->fetchAll();

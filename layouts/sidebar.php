@@ -69,8 +69,19 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                     </a>
                 </li>
 
+
                 <?php if ($rolUsuario === 'admin' || $rolUsuario === 'supervisor'): ?>
-                    <!-- Equipos (Solo Admin y Supervisor) -->
+
+                    <!-- Categorías de Equipos (PRIMERO) -->
+                    <li class="nav-item">
+                        <a href="<?php echo $base_path; ?>modules/categorias_equipos/listar.php"
+                            class="nav-link <?php echo $current_page == 'listar' && strpos($_SERVER['PHP_SELF'], 'categorias_equipos') !== false ? 'active' : ''; ?>">
+                            <i class="nav-icon fas fa-tags"></i>
+                            <p>Categorías Equipos</p>
+                        </a>
+                    </li>
+
+                    <!-- Equipos (SEGUNDO) -->
                     <li class="nav-item">
                         <a href="<?php echo $base_path; ?>modules/equipos/listar.php"
                             class="nav-link <?php echo $current_page == 'listar' && strpos($_SERVER['PHP_SELF'], 'equipos') !== false ? 'active' : ''; ?>">
@@ -78,6 +89,16 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                             <p>Equipos</p>
                         </a>
                     </li>
+
+                    <!-- Contratas (TERCERO) -->
+                    <li class="nav-item">
+                        <a href="<?php echo $base_path; ?>modules/contratas/listar.php"
+                            class="nav-link <?php echo $current_page == 'listar' && strpos($_SERVER['PHP_SELF'], 'contratas') !== false ? 'active' : ''; ?>">
+                            <i class="nav-icon fas fa-handshake"></i>
+                            <p>Contratas</p>
+                        </a>
+                    </li>
+
                 <?php endif; ?>
 
                 <?php if ($rolUsuario === 'admin' || $rolUsuario === 'supervisor'): ?>
@@ -143,7 +164,7 @@ $es_solo_lectura = ($_SESSION['rol'] === 'supervisor');
                                     <i class="fas fa-pause-circle nav-icon text-warning"></i>
                                     <p>Horas Paradas (HP)</p>
                                 </a>
-                            </li>                            
+                            </li>
                         </ul>
                     </li>
 

@@ -24,6 +24,10 @@ document.addEventListener("DOMContentLoaded", function () {
         { title: "Categoría" },
         { title: "Código" },
         { title: "Descripción" },
+        { title: "Propietario" },
+        { title: "Tarifa" },
+        { title: "Consumo" },
+        { title: "Capacidad" },
         { title: "Estado" },
         { title: "Fecha Creación" },
         { title: "Acciones", orderable: false, searchable: false },
@@ -253,6 +257,11 @@ async function buscarEquiposPorCategoria(categoria) {
     console.error("Error al buscar equipos:", error);
     return [];
   }
+}
+
+
+function editarEquipo(id) {
+    window.location.href = `editar.php?id=${id}`;
 }
 
 console.log("✓ Script de equipos cargado");

@@ -105,4 +105,68 @@ Campos tipo_trabajo_id, fase_costo_id, partida_id
 - Tabla HP con categorías
 - Control combustible con diferencia
 
+# 📋 CHANGELOG - Sesión de Desarrollo V3.1/V3.2
+✅ MÓDULO DE CONTRATAS
+
+✅ Creada tabla contratas con datos de empresas subcontratistas
+✅ Modificada tabla equipos para relacionar con contratas
+✅ API completa: api/contratas.php (CRUD)
+✅ Módulos frontend: listar, agregar, editar
+✅ JavaScript: assets/js/contratas.js
+✅ Sidebar actualizado con enlace a Contratas
+✅ Permisos: Admin (todo), Supervisor (solo ver), Operador (sin acceso)
+
+
+✅ MÓDULO DE CATEGORÍAS DE EQUIPOS
+
+✅ Creada tabla categorias_equipos (12 categorías iniciales)
+✅ Campos: nombre, descripción, consumo_default, capacidad_default, orden
+✅ API completa: api/categorias_equipos.php (CRUD)
+✅ Módulos frontend: listar, agregar, editar
+✅ JavaScript: assets/js/categorias_equipos.js
+✅ Sidebar actualizado con enlace a Categorías Equipos
+✅ Eliminado campo icono (no profesional)
+✅ Permisos: Admin (todo), Supervisor (solo ver), Operador (sin acceso)
+
+
+✅ MÓDULO DE EQUIPOS - ACTUALIZADO
+
+✅ Eliminados campos consumo_promedio_hr y capacidad_tanque (ahora se obtienen de la categoría)
+✅ Agregado campo categoria_id (FK a categorias_equipos)
+✅ Dropdown de categorías dinámico desde BD
+✅ Selector de contratas (Propio/Alquilado)
+✅ Campos de tarifa (hora/día) para equipos alquilados
+✅ API actualizada: api/equipos.php
+✅ Listado muestra: Categoría, Propietario (con nombre de contrata), Consumo/Capacidad (de la categoría)
+
+
+🗂️ ESTRUCTURA DE CARPETAS
+modules/
+├── contratas/
+│   ├── listar.php
+│   ├── agregar.php
+│   └── editar.php
+├── categorias_equipos/
+│   ├── listar.php
+│   ├── agregar.php
+│   └── editar.php
+└── equipos/ (actualizado)
+
+api/
+├── contratas.php
+├── categorias_equipos.php
+└── equipos.php (actualizado)
+
+assets/js/
+├── contratas.js
+├── categorias_equipos.js
+└── equipos.js (actualizado)
+
+🎯 LÓGICA DE NEGOCIO IMPLEMENTADA
+
+Categorías → Define consumo estándar por tipo de equipo
+Equipos → Usan consumo de su categoría (centralizado)
+Contratas → Diferencian equipos propios vs alquilados
+Detección de anomalías → Comparar consumo real vs estándar de categoría
+
 # 
